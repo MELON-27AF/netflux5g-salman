@@ -6,7 +6,7 @@ Handles Webshark container creation and removal with bind mount to captures fold
 import os
 import time
 from PyQt5.QtWidgets import QMessageBox, QProgressDialog
-from PyQt5.QtCore import pyqtSignal, QThread, QMutex
+from PyQt5.QtCore import pyqtSignal, QThread, QMutex, QMutexLocker
 from utils.debug import debug_print, error_print, warning_print
 from utils.docker_utils import DockerUtils, DockerContainerBuilder
 
@@ -24,10 +24,15 @@ class PacketAnalyzerDeploymentWorker(QThread):
         self.captures_path = captures_path
         self.network_name = network_name or "netflux5g"
         self.mutex = QMutex()
+        self._cancelled = False
         
     def run(self):
         debug_print(f"DEBUG: Worker thread starting operation: {self.operation}")
         try:
+            with QMutexLocker(self.mutex):
+                if self._cancelled:
+                    return
+                    
             if self.operation == 'deploy':
                 self._deploy_packet_analyzer()
             elif self.operation == 'stop':
@@ -38,60 +43,137 @@ class PacketAnalyzerDeploymentWorker(QThread):
             self.operation_finished.emit(False, str(e))
         debug_print("DEBUG: Worker thread ending")
     
+    def cancel_operation(self):
+        """Cancel the current operation."""
+        with QMutexLocker(self.mutex):
+            self._cancelled = True
+    
+    def _check_cancelled(self):
+        """Check if operation has been cancelled."""
+        with QMutexLocker(self.mutex):
+            return self._cancelled
+    
     def _deploy_packet_analyzer(self):
         try:
+            if self._check_cancelled():
+                return
+                
             self.status_updated.emit("Checking if Webshark image exists...")
             self.progress_updated.emit(10)
-            image_name = "adaptive/webshark:latest"
+            
+            # Use consistent image name
+            image_name = "adaptive/netflux5g-webshark:latest"
+            
             # Build image if not exists
             if not DockerUtils.image_exists(image_name):
                 webshark_path = self._get_webshark_path()
                 if not webshark_path:
                     raise Exception("Webshark directory not found")
+                    
+                if self._check_cancelled():
+                    return
+                    
                 self.status_updated.emit("Building Webshark Docker image...")
                 self.progress_updated.emit(20)
                 DockerUtils.build_image(image_name, webshark_path)
+            
+            if self._check_cancelled():
+                return
+                
             # Remove existing container if exists
             if DockerUtils.container_exists(self.container_name):
+                self.status_updated.emit("Removing existing container...")
+                self.progress_updated.emit(30)
                 DockerUtils.stop_container(self.container_name)
+            
+            if self._check_cancelled():
+                return
+                
             builder = DockerContainerBuilder(image=image_name, container_name=self.container_name)
             builder.set_network(self.network_name)
             builder.add_port('8085:8085')
-            if self.captures_path:
-                builder.add_volume(f"{self.captures_path}:/captures")
+            
+            if self.captures_path and os.path.exists(self.captures_path):
+                builder.add_volume(f"{os.path.abspath(self.captures_path)}:/captures")
+            
             builder.add_env('SHARKD_SOCKET=/home/node/sharkd.sock')
             builder.add_env('CAPTURES_PATH=/captures/')
+            
             self.status_updated.emit("Deploying Webshark container...")
             self.progress_updated.emit(50)
+            
+            if self._check_cancelled():
+                return
+                
             success, msg = builder.run()
+            
+            if self._check_cancelled():
+                return
+                
             if success:
-                self.operation_finished.emit(True, f"Webshark container '{self.container_name}' deployed successfully.")
+                self.progress_updated.emit(90)
+                self.status_updated.emit("Verifying container is running...")
+                time.sleep(2)  # Give container time to start
+                
+                if DockerUtils.is_container_running(self.container_name):
+                    self.progress_updated.emit(100)
+                    self.operation_finished.emit(True, f"Webshark container '{self.container_name}' deployed successfully on port 8085.")
+                else:
+                    self.operation_finished.emit(False, "Container started but is not running properly.")
             else:
-                self.operation_finished.emit(False, msg)
+                self.operation_finished.emit(False, f"Failed to deploy container: {msg}")
+                
         except Exception as e:
             error_print(f"Failed to deploy Webshark: {e}")
             self.operation_finished.emit(False, str(e))
 
     def _stop_packet_analyzer(self):
         try:
+            if self._check_cancelled():
+                return
+                
             self.status_updated.emit("Stopping Webshark container...")
             self.progress_updated.emit(10)
+            
             if not DockerUtils.is_container_running(self.container_name):
                 self.operation_finished.emit(True, "Webshark container is not running.")
                 return
+            
+            if self._check_cancelled():
+                return
+                
+            self.progress_updated.emit(50)
             DockerUtils.stop_container(self.container_name)
+            
+            self.progress_updated.emit(90)
+            self.status_updated.emit("Verifying container is stopped...")
+            time.sleep(1)
+            
+            if self._check_cancelled():
+                return
+                
+            self.progress_updated.emit(100)
             self.operation_finished.emit(True, f"Webshark container '{self.container_name}' stopped successfully.")
+            
         except Exception as e:
             error_print(f"Failed to stop Webshark: {e}")
             self.operation_finished.emit(False, str(e))
     
     def _get_webshark_path(self):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        webshark_path = os.path.join(os.path.dirname(current_dir), "automation", "webshark")
-        if os.path.exists(webshark_path) and os.path.isfile(os.path.join(webshark_path, "Dockerfile")):
-            return webshark_path
-        error_print(f"Webshark directory not found. Tried: {webshark_path}")
-        return None
+        """Get the path to the webshark directory containing Dockerfile."""
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            webshark_path = os.path.join(os.path.dirname(current_dir), "automation", "webshark")
+            
+            if os.path.exists(webshark_path) and os.path.isfile(os.path.join(webshark_path, "Dockerfile")):
+                return os.path.abspath(webshark_path)
+                
+            error_print(f"Webshark directory not found. Tried: {webshark_path}")
+            return None
+            
+        except Exception as e:
+            error_print(f"Error getting webshark path: {e}")
+            return None
 
 
 class PacketAnalyzerManager:
@@ -104,7 +186,18 @@ class PacketAnalyzerManager:
         self.operation_mutex = QMutex()
         
     def deployPacketAnalyzer(self):
+        """Deploy Webshark packet analyzer with UI feedback."""
         debug_print("DEBUG: Starting Webshark deployment process")
+        
+        with QMutexLocker(self.operation_mutex):
+            if self.deployment_worker and self.deployment_worker.isRunning():
+                QMessageBox.warning(
+                    self.main_window,
+                    "Operation in Progress",
+                    "Another deployment operation is already in progress. Please wait for it to complete."
+                )
+                return
+        
         if self.is_packet_analyzer_running():
             QMessageBox.information(
                 self.main_window, 
@@ -112,8 +205,10 @@ class PacketAnalyzerManager:
                 "Webshark packet analyzer is already running on port 8085"
             )
             return
+        
         container_name = "netflux5g-webshark"
         captures_path = self._get_captures_path()
+        
         if not captures_path:
             QMessageBox.warning(
                 self.main_window,
@@ -121,6 +216,7 @@ class PacketAnalyzerManager:
                 "Could not find webshark captures directory"
             )
             return
+        
         if not self._check_docker_available():
             QMessageBox.warning(
                 self.main_window,
@@ -128,6 +224,7 @@ class PacketAnalyzerManager:
                 "Docker is not available or not running. Please install Docker and ensure it's running."
             )
             return
+        
         if not DockerUtils.network_exists("netflux5g"):
             reply = QMessageBox.question(
                 self.main_window,
@@ -146,10 +243,22 @@ class PacketAnalyzerManager:
                     return
             else:
                 return
+        
         self._start_operation('deploy', container_name, captures_path, "netflux5g")
     
     def stopPacketAnalyzer(self):
+        """Stop Webshark packet analyzer with UI feedback."""
         debug_print("DEBUG: Starting Webshark stop process")
+        
+        with QMutexLocker(self.operation_mutex):
+            if self.deployment_worker and self.deployment_worker.isRunning():
+                QMessageBox.warning(
+                    self.main_window,
+                    "Operation in Progress",
+                    "Another deployment operation is already in progress. Please wait for it to complete."
+                )
+                return
+        
         if not self.is_packet_analyzer_running():
             QMessageBox.information(
                 self.main_window, 
@@ -157,6 +266,7 @@ class PacketAnalyzerManager:
                 "Webshark packet analyzer is not currently running"
             )
             return
+        
         container_name = "netflux5g-webshark"
         reply = QMessageBox.question(
             self.main_window,
@@ -164,74 +274,116 @@ class PacketAnalyzerManager:
             "Are you sure you want to stop the Webshark packet analyzer?",
             QMessageBox.Yes | QMessageBox.No
         )
+        
         if reply == QMessageBox.Yes:
             self._start_operation('stop', container_name, None, None)
     
     def is_packet_analyzer_running(self):
-        container_name = "netflux5g-webshark"
-        return DockerUtils.is_container_running(container_name)
+        """Check if the packet analyzer container is running."""
+        try:
+            container_name = "netflux5g-webshark"
+            return DockerUtils.is_container_running(container_name)
+        except Exception as e:
+            error_print(f"Error checking if packet analyzer is running: {e}")
+            return False
     
     def deploy_packet_analyzer_sync(self):
+        """Deploy packet analyzer synchronously (for automation/testing)."""
         debug_print("DEBUG: Starting synchronous Webshark deployment")
+        
         container_name = "netflux5g-webshark"
         captures_path = self._get_captures_path()
+        
         if not captures_path:
             error_print("Could not find webshark captures directory")
             return False
-        # Build image if not exists
-        image_name = "adaptive/netflux5g-webshark:latest"
-        if not DockerUtils.image_exists(image_name):
-            webshark_path = self._get_webshark_path()
-            if not webshark_path:
-                error_print("Webshark directory not found")
+        
+        try:
+            # Use consistent image name
+            image_name = "adaptive/netflux5g-webshark:latest"
+            
+            # Build image if not exists
+            if not DockerUtils.image_exists(image_name):
+                webshark_path = self._get_webshark_path()
+                if not webshark_path:
+                    error_print("Webshark directory not found")
+                    return False
+                DockerUtils.build_image(image_name, webshark_path)
+            
+            # Remove existing container if exists
+            if DockerUtils.container_exists(container_name):
+                DockerUtils.stop_container(container_name)
+            
+            builder = DockerContainerBuilder(image=image_name, container_name=container_name)
+            builder.set_network("netflux5g")
+            builder.add_port('8085:8085')
+            builder.add_volume(f'{os.path.abspath(captures_path)}:/captures')
+            builder.add_env('SHARKD_SOCKET=/home/node/sharkd.sock')
+            builder.add_env('CAPTURES_PATH=/captures/')
+            
+            success, msg = builder.run()
+            
+            if success:
+                time.sleep(2)  # Give container time to start
+                return DockerUtils.is_container_running(container_name)
+            else:
+                error_print(f"Failed to deploy Webshark: {msg}")
                 return False
-            DockerUtils.build_image(image_name, webshark_path)
-        # Remove existing container if exists
-        if DockerUtils.container_exists(container_name):
-            DockerUtils.stop_container(container_name)
-        builder = DockerContainerBuilder(image=image_name, container_name=container_name)
-        builder.set_network("netflux5g")
-        builder.add_port('8085:8085')
-        builder.add_volume(f'{captures_path}:/captures')
-        builder.add_env('SHARKD_SOCKET=/home/node/sharkd.sock')
-        builder.add_env('CAPTURES_PATH=/captures/')
-        success, msg = builder.run()
-        if success:
-            time.sleep(2)
-            return DockerUtils.is_container_running(container_name)
-        else:
-            error_print(f"Failed to deploy Webshark: {msg}")
+                
+        except Exception as e:
+            error_print(f"Exception during synchronous deployment: {e}")
             return False
     
     def _get_captures_path(self):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        webshark_path = os.path.join(os.path.dirname(current_dir), "automation", "webshark")
-        captures_path = os.path.join(webshark_path, "captures")
-        if os.path.exists(captures_path):
-            return captures_path
-        error_print(f"Captures directory not found. Tried: {captures_path}")
-        return None
+        """Get the path to the captures directory."""
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            webshark_path = os.path.join(os.path.dirname(current_dir), "automation", "webshark")
+            captures_path = os.path.join(webshark_path, "captures")
+            
+            if os.path.exists(captures_path):
+                return os.path.abspath(captures_path)
+                
+            # Try to create the captures directory if it doesn't exist
+            os.makedirs(captures_path, exist_ok=True)
+            if os.path.exists(captures_path):
+                return os.path.abspath(captures_path)
+                
+            error_print(f"Captures directory not found and could not be created. Tried: {captures_path}")
+            return None
+            
+        except Exception as e:
+            error_print(f"Error getting captures path: {e}")
+            return None
     
     def _get_webshark_path(self):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        webshark_path = os.path.join(os.path.dirname(current_dir), "automation", "webshark")
-        if os.path.exists(webshark_path) and os.path.isfile(os.path.join(webshark_path, "Dockerfile")):
-            return webshark_path
-        error_print(f"Webshark directory not found. Tried: {webshark_path}")
-        return None
+        """Get the path to the webshark directory containing Dockerfile."""
+        try:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            webshark_path = os.path.join(os.path.dirname(current_dir), "automation", "webshark")
+            
+            if os.path.exists(webshark_path) and os.path.isfile(os.path.join(webshark_path, "Dockerfile")):
+                return os.path.abspath(webshark_path)
+                
+            error_print(f"Webshark directory not found. Tried: {webshark_path}")
+            return None
+            
+        except Exception as e:
+            error_print(f"Error getting webshark path: {e}")
+            return None
     
     def _check_docker_available(self):
-        return DockerUtils.check_docker_available(self.main_window, show_error=False)
+        """Check if Docker is available and running."""
+        try:
+            return DockerUtils.check_docker_available(self.main_window, show_error=False)
+        except Exception as e:
+            error_print(f"Error checking Docker availability: {e}")
+            return False
     
     def _start_operation(self, operation, container_name, captures_path, network_name):
+        """Start a background operation with progress dialog."""
         debug_print(f"DEBUG: Starting operation: {operation}")
-        if self.deployment_worker and self.deployment_worker.isRunning():
-            QMessageBox.warning(
-                self.main_window,
-                "Operation in Progress",
-                "Another deployment operation is already in progress. Please wait for it to complete."
-            )
-            return
+        
         operation_text = "Deploying" if operation == 'deploy' else "Stopping"
         self.progress_dialog = QProgressDialog(
             f"{operation_text} Webshark...",
@@ -244,6 +396,7 @@ class PacketAnalyzerManager:
         self.progress_dialog.setModal(True)
         self.progress_dialog.canceled.connect(self._on_deployment_canceled)
         self.progress_dialog.show()
+        
         self.deployment_worker = PacketAnalyzerDeploymentWorker(
             operation, container_name, captures_path, network_name
         )
@@ -253,11 +406,24 @@ class PacketAnalyzerManager:
         self.deployment_worker.start()
     
     def _on_deployment_finished(self, success, message):
+        """Handle completion of deployment operation."""
         debug_print(f"DEBUG: _on_deployment_finished called with success={success}, message={message}")
+        
+        # Clean up progress dialog
         if self.progress_dialog:
-            self.progress_dialog.canceled.disconnect()
+            try:
+                self.progress_dialog.canceled.disconnect()
+            except:
+                pass  # Connection might already be broken
             self.progress_dialog.close()
             self.progress_dialog = None
+        
+        # Clean up worker thread
+        if self.deployment_worker:
+            self.deployment_worker.wait(3000)  # Wait up to 3 seconds for thread to finish
+            self.deployment_worker = None
+        
+        # Show result message
         if success:
             debug_print("DEBUG: Showing success message")
             QMessageBox.information(self.main_window, "Success", message)
@@ -265,23 +431,38 @@ class PacketAnalyzerManager:
                 self.main_window.status_manager.showCanvasStatus("Webshark deployment completed")
         else:
             debug_print("DEBUG: Showing failure message")
-            QMessageBox.warning(self.main_window, "Deployment Failed", message)
+            QMessageBox.warning(self.main_window, "Operation Failed", message)
             if hasattr(self.main_window, 'status_manager'):
-                self.main_window.status_manager.showCanvasStatus("Webshark deployment failed")
+                self.main_window.status_manager.showCanvasStatus("Webshark operation failed")
+        
+        # Update UI state
         if hasattr(self.main_window, 'updateWindowState'):
             self.main_window.updateWindowState()
     
     def _on_deployment_canceled(self):
+        """Handle cancellation of deployment operation."""
         debug_print("DEBUG: _on_deployment_canceled called")
+        
+        # Cancel the worker operation
         if self.deployment_worker and self.deployment_worker.isRunning():
-            debug_print("DEBUG: Terminating deployment worker")
+            debug_print("DEBUG: Cancelling deployment worker")
+            self.deployment_worker.cancel_operation()
             self.deployment_worker.terminate()
             self.deployment_worker.wait(3000)
+            self.deployment_worker = None
+        
+        # Clean up progress dialog
         if self.progress_dialog:
             debug_print("DEBUG: Closing progress dialog from cancel")
+            try:
+                self.progress_dialog.canceled.disconnect()
+            except:
+                pass  # Connection might already be broken
             self.progress_dialog.close()
             self.progress_dialog = None
+        
         debug_print("DEBUG: Showing cancelled message")
         QMessageBox.information(self.main_window, "Cancelled", "Webshark operation was cancelled")
+        
         if hasattr(self.main_window, 'status_manager'):
             self.main_window.status_manager.showCanvasStatus("Webshark operation cancelled")
