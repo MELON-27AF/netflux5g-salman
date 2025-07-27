@@ -1,6 +1,6 @@
 """
-Monitoring deployment manager for NetFlux5G Editor
-Handles Prometheus, Grafana, and other monitoring container creation and removal using DockerUtils and DockerContainerBuilder
+Enhanced Monitoring deployment manager for NetFlux5G Editor
+Handles Prometheus, Grafana, Blackbox Exporter, and other monitoring container creation and removal using DockerUtils and DockerContainerBuilder
 """
 
 import os
@@ -43,7 +43,16 @@ class MonitoringDeploymentWorker(QThread):
             'image': 'prom/prometheus',
             'ports': ['9090:9090'],
             'volumes': [
-                cwd + '/automation/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml'
+                cwd + '/automation/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml',
+                cwd + '/automation/monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml'
+            ],
+            'extra_args': [
+                '--config.file=/etc/prometheus/prometheus.yml',
+                '--storage.tsdb.path=/prometheus',
+                '--web.console.libraries=/etc/prometheus/console_libraries',
+                '--web.console.templates=/etc/prometheus/consoles',
+                '--storage.tsdb.retention.time=200h',
+                '--web.enable-lifecycle'
             ]
         },
         'grafana': {
@@ -56,12 +65,13 @@ class MonitoringDeploymentWorker(QThread):
             ],
             'env': [
                 'GF_PATHS_PROVISIONING=/etc/grafana/provisioning',
-                'DS_PROMETHEUS=prometheus'
+                'DS_PROMETHEUS=prometheus',
+                'GF_SECURITY_ADMIN_PASSWORD=admin'
             ]
         },
         'node-exporter': {
-            'image': 'prom/node-exporter',
-            'ports': [],
+            'image': 'prom/node-exporter:latest',
+            'ports': ['9100:9100'],
             'volumes': ['/:/host:ro,rslave'],
             'extra_args': ['--path.rootfs=/host'],
             'pid_mode': 'host'
@@ -75,6 +85,29 @@ class MonitoringDeploymentWorker(QThread):
                 '/sys:/sys:ro',
                 '/var/lib/docker/:/var/lib/docker:ro',
                 '/dev/disk/:/dev/disk:ro'
+            ],
+            'privileged': True
+        },
+        'blackbox-exporter': {
+            'image': 'prom/blackbox-exporter:latest',
+            'ports': ['9115:9115'],
+            'volumes': [
+                cwd + '/automation/monitoring/blackbox/config.yml:/etc/blackbox_exporter/config.yml'
+            ],
+            'extra_args': [
+                '--config.file=/etc/blackbox_exporter/config.yml'
+            ]
+        },
+        'alertmanager': {
+            'image': 'prom/alertmanager:latest',
+            'ports': ['9093:9093'],
+            'volumes': [
+                cwd + '/automation/monitoring/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml'
+            ],
+            'extra_args': [
+                '--config.file=/etc/alertmanager/alertmanager.yml',
+                '--storage.path=/alertmanager',
+                '--web.external-url=http://localhost:9093'
             ]
         }
     }
@@ -86,73 +119,137 @@ class MonitoringDeploymentWorker(QThread):
             total_containers = len(self.monitoring_containers)
             progress_step = 80 // total_containers
             current_progress = 10
+            
             for container_name, config in self.monitoring_containers.items():
                 full_container_name = f"{self.container_prefix}-{container_name}"
                 
                 self.progress_updated.emit(current_progress)
                 self.status_updated.emit(f"Checking if {container_name} container exists...")
+                
+                # Stop existing container if running
                 if DockerUtils.container_exists(full_container_name):
-                    continue
+                    self.status_updated.emit(f"Stopping existing {container_name} container...")
+                    DockerUtils.stop_container(full_container_name)
+                
+                # Pull image if not exists
                 if not DockerUtils.image_exists(config['image']):
                     self.progress_updated.emit(current_progress)
-                    self.status_updated.emit(f"Docker Image doesn't exist. Pulling image {config['image']}...")
+                    self.status_updated.emit(f"Pulling image {config['image']}...")
                     DockerUtils.pull_image(config['image'])
+                
+                # Build and run container
                 builder = DockerContainerBuilder(image=config['image'], container_name=full_container_name)
                 builder.set_network(self.network_name)
+                
+                # Add ports
                 for port in config.get('ports', []):
                     builder.add_port(port)
+                
+                # Add volumes
                 for volume in config.get('volumes', []):
                     builder.add_volume(volume)
+                
+                # Add environment variables
                 for env in config.get('env', []):
                     builder.add_env(env)
-                # Ensure --pid=host is added as an extra arg if pid_mode is present
+                
+                # Handle privileged mode
+                if config.get('privileged', False):
+                    builder.add_extra_arg('--privileged')
+                
+                # Handle PID mode
                 if 'pid_mode' in config and config['pid_mode']:
                     builder.add_extra_arg(f'--pid={config["pid_mode"]}')
-                # For node-exporter, pass --path.rootfs=/host as a command arg, not extra arg
+                
+                # Handle extra args and command args
                 if container_name == 'node-exporter':
                     for arg in config.get('extra_args', []):
                         builder.add_command_arg(arg)
                 else:
                     for arg in config.get('extra_args', []):
-                        builder.add_extra_arg(arg)
+                        builder.add_command_arg(arg)
+                
                 self.status_updated.emit(f"Deploying {container_name}...")
                 builder.run()
                 current_progress += progress_step
+            
             self.status_updated.emit("Waiting for containers to be ready...")
             self.progress_updated.emit(90)
-            time.sleep(3)
+            time.sleep(5)  # Give containers time to start up
+            
+            # Verify containers are running
+            failed_containers = []
+            for container_name in self.monitoring_containers:
+                full_container_name = f"{self.container_prefix}-{container_name}"
+                if not DockerUtils.is_container_running(full_container_name):
+                    failed_containers.append(container_name)
+            
+            if failed_containers:
+                warning_print(f"Some containers failed to start: {failed_containers}")
+            
             self.progress_updated.emit(100)
             self.operation_finished.emit(True, 
-                f"Monitoring stack deployed successfully!\n"
+                f"Monitoring stack deployed successfully!\n\n"
+                f"📊 Access URLs:\n"
                 f"• Grafana: http://localhost:3000 (admin/admin)\n"
                 f"• Prometheus: http://localhost:9090\n"
-                f"• cAdvisor: http://localhost:8080")
+                f"• Alertmanager: http://localhost:9093\n"
+                f"• cAdvisor: http://localhost:8080\n"
+                f"• Node Exporter: http://localhost:9100/metrics\n"
+                f"• Blackbox Exporter: http://localhost:9115\n\n"
+                f"🔍 Features enabled:\n"
+                f"• Network connectivity monitoring\n"
+                f"• HTTP/HTTPS endpoint probing\n"
+                f"• ICMP ping monitoring\n"
+                f"• TCP port connectivity checks\n"
+                f"• System and container metrics\n"
+                f"• Alert management\n\n"
+                f"⚠️ Failed containers: {', '.join(failed_containers) if failed_containers else 'None'}")
+                
         except Exception as e:
-            self.operation_finished.emit(False, f"Unexpected error: {str(e)}")
+            error_print(f"Deployment failed: {e}")
+            self.operation_finished.emit(False, f"Deployment failed: {str(e)}")
 
     def _stop_monitoring(self):
         try:
+            total_containers = len(self.monitoring_containers)
+            current_progress = 10
+            
             for container_name in self.monitoring_containers:
                 full_container_name = f"{self.container_prefix}-{container_name}"
-                total_containers = len(self.monitoring_containers)
                 progress_step = 80 // total_containers
-                current_progress = 10 + (progress_step * list(self.monitoring_containers.keys()).index(container_name))
+                current_progress += progress_step
+                
+                self.status_updated.emit(f"Stopping {container_name}...")
                 self.progress_updated.emit(current_progress)
-                DockerUtils.stop_container(full_container_name)
+                
+                if DockerUtils.container_exists(full_container_name):
+                    DockerUtils.stop_container(full_container_name)
+                    
+            self.progress_updated.emit(100)
             self.operation_finished.emit(True, "All monitoring containers stopped successfully.")
+            
         except Exception as e:
             error_print(f"Failed to stop monitoring: {e}")
             self.operation_finished.emit(False, str(e))
 
     def _cleanup_monitoring(self):
         try:
+            self.status_updated.emit("Cleaning up monitoring containers...")
+            
             for container_name in self.monitoring_containers:
                 full_container_name = f"{self.container_prefix}-{container_name}"
-                DockerUtils.stop_container(full_container_name)
+                
+                self.status_updated.emit(f"Removing {container_name}...")
+                
                 if DockerUtils.container_exists(full_container_name):
                     DockerUtils.stop_container(full_container_name)
+                    
+            self.progress_updated.emit(100)
             self.operation_finished.emit(True, "Monitoring stack completely removed")
+            
         except Exception as e:
+            error_print(f"Cleanup failed: {e}")
             self.operation_finished.emit(False, f"Cleanup failed: {str(e)}")
 
 class MonitoringManager:
@@ -167,12 +264,14 @@ class MonitoringManager:
         container_prefix = "netflux5g"
         if not self._check_docker_available():
             return
+            
         if hasattr(self.main_window, 'docker_network_manager'):
             if not self.main_window.docker_network_manager.prompt_create_netflux5g_network():
                 self.main_window.status_manager.showCanvasStatus("Monitoring deployment cancelled - netflux5g network required")
                 return
         else:
             warning_print("Docker network manager not available, proceeding without network check")
+            
         running_containers = self._get_running_monitoring_containers(container_prefix)
         if running_containers:
             reply = QMessageBox.question(
@@ -185,29 +284,40 @@ class MonitoringManager:
             )
             if reply == QMessageBox.No:
                 return
-            self._stop_containers_sync(container_prefix)
+                
         reply = QMessageBox.question(
             self.main_window,
-            "Deploy Monitoring Stack",
-            f"This will deploy the comprehensive monitoring stack using Docker\n\n"
+            "Deploy Enhanced Monitoring Stack",
+            f"This will deploy the comprehensive monitoring stack with blackbox monitoring:\n\n"
             f"📊 Services to be deployed:\n"
             f"• Prometheus (metrics collection) - port 9090\n"
             f"• Grafana (visualization) - port 3000\n" 
             f"• Node Exporter (system metrics) - port 9100\n"
-            f"• cAdvisor (container metrics) - port 8080\n\n"
-            f"🔧 Features included:\n"
-            f"• Enhanced dashboard with 5G Core monitoring\n"
-            f"• Near Real-time UE status tracking\n"
-            f"• Container auto-discovery\n\n"
+            f"• cAdvisor (container metrics) - port 8080\n"
+            f"• Blackbox Exporter (network probing) - port 9115\n"
+            f"• Alertmanager (alert handling) - port 9093\n\n"
+            f"🔍 Blackbox monitoring capabilities:\n"
+            f"• HTTP/HTTPS endpoint monitoring\n"
+            f"• ICMP ping tests\n"
+            f"• TCP port connectivity checks\n"
+            f"• DNS resolution monitoring\n"
+            f"• SSL certificate expiry tracking\n\n"
+            f"🎯 Monitored targets include:\n"
+            f"• All 5G Core Network Functions (AMF, SMF, UPF, NRF, etc.)\n"
+            f"• gNodeBs and UE containers\n"
+            f"• Infrastructure services (MongoDB, WebUI, ONOS)\n"
+            f"• External connectivity (8.8.8.8)\n\n"
             f"🌐 Access URLs after deployment:\n"
             f"• Grafana: http://localhost:3000 (admin/admin)\n"
-            f"• Prometheus: http://localhost:9090\n\n"
+            f"• Prometheus: http://localhost:9090\n"
+            f"• Alertmanager: http://localhost:9093\n\n"
             f"Do you want to continue?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes
         )
         if reply == QMessageBox.No:
             return
+            
         self._start_operation('deploy', container_prefix, "netflux5g")
     
     def stopMonitoring(self):
@@ -215,6 +325,7 @@ class MonitoringManager:
         container_prefix = "netflux5g"
         if not self._check_docker_available():
             return
+            
         existing_containers = self._get_existing_monitoring_containers(container_prefix)
         if not existing_containers:
             QMessageBox.information(
@@ -223,18 +334,21 @@ class MonitoringManager:
                 f"No monitoring containers found with prefix '{container_prefix}'."
             )
             return
+            
         reply = QMessageBox.question(
             self.main_window,
             "Stop Monitoring Stack",
-            f"This will stop and remove monitoring containers:\n"
-            f"• Found containers: {', '.join(existing_containers)}\n\n"
-            f"The containers will be stopped but no data will be lost.\n\n"
+            f"This will stop all monitoring containers:\n\n"
+            f"📊 Found containers: {', '.join(existing_containers)}\n\n"
+            f"The containers will be stopped but no data will be lost.\n"
+            f"You can restart them later with 'Deploy Monitoring'.\n\n"
             f"Are you sure you want to continue?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
         if reply == QMessageBox.No:
             return
+            
         self._start_operation('stop', container_prefix, None)
 
     def _check_docker_available(self):
@@ -242,7 +356,7 @@ class MonitoringManager:
     
     def _get_running_monitoring_containers(self, container_prefix):
         running_containers = []
-        monitoring_types = ['prometheus', 'grafana', 'node-exporter', 'cadvisor']
+        monitoring_types = ['prometheus', 'grafana', 'node-exporter', 'cadvisor', 'blackbox-exporter', 'alertmanager']
         for monitoring_type in monitoring_types:
             container_name = f"{container_prefix}-{monitoring_type}"
             if DockerUtils.is_container_running(container_name):
@@ -251,28 +365,19 @@ class MonitoringManager:
 
     def _get_existing_monitoring_containers(self, container_prefix):
         existing_containers = []
-        monitoring_types = ['prometheus', 'grafana', 'node-exporter', 'cadvisor']
+        monitoring_types = ['prometheus', 'grafana', 'node-exporter', 'cadvisor', 'blackbox-exporter', 'alertmanager']
         for monitoring_type in monitoring_types:
             container_name = f"{container_prefix}-{monitoring_type}"
             if DockerUtils.container_exists(container_name):
                 existing_containers.append(monitoring_type)
         return existing_containers
     
-    def _stop_containers_sync(self, container_prefix):
-        monitoring_types = ['prometheus', 'grafana', 'node-exporter', 'cadvisor']
-        for monitoring_type in monitoring_types:
-            container_name = f"{container_prefix}-{monitoring_type}"
-            try:
-                DockerUtils.stop_container(container_name)
-                DockerUtils.stop_container(container_name)
-            except Exception:
-                pass
-
     def _start_operation(self, operation, container_prefix, network_name):
         """Start a MonitoringDeploymentWorker thread for the given operation, with progress dialog."""
         if self.current_worker is not None and self.current_worker.isRunning():
             warning_print("A monitoring operation is already in progress.")
             return
+            
         # Create progress dialog
         self.progress_dialog = QProgressDialog(
             "Monitoring operation in progress...",
@@ -281,19 +386,20 @@ class MonitoringManager:
             100,
             self.main_window
         )
-        self.progress_dialog.setWindowTitle("Monitoring Operation")
+        self.progress_dialog.setWindowTitle("Enhanced Monitoring Operation")
         self.progress_dialog.setModal(True)
         self.progress_dialog.show()
+        
         self.current_worker = MonitoringDeploymentWorker(operation, container_prefix, network_name)
         self.current_worker.progress_updated.connect(self._on_progress_updated)
         self.current_worker.status_updated.connect(self._on_status_updated)
         self.current_worker.operation_finished.connect(self._on_operation_finished)
         self.progress_dialog.canceled.connect(self._on_operation_canceled)
+        
         self.current_worker.start()
 
     def _on_operation_canceled(self):
         if self.current_worker:
-            # If you add cancellation logic to MonitoringDeploymentWorker, call it here
             self.current_worker.terminate()
             self.current_worker.wait(3000)
         if self.progress_dialog:
@@ -312,6 +418,7 @@ class MonitoringManager:
         if self.progress_dialog:
             self.progress_dialog.close()
             self.progress_dialog = None
+            
         if success:
             QMessageBox.information(self.main_window, "Monitoring Operation Complete", message)
         else:

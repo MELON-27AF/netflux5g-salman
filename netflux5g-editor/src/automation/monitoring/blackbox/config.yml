@@ -1,4 +1,5 @@
 modules:
+  # ICMP module for basic connectivity testing
   icmp:
     prober: icmp
     timeout: 5s
@@ -8,6 +9,7 @@ modules:
       payload_size: 56
       dont_fragment: false
 
+  # ICMP module optimized for UE containers with faster timeout
   icmp_ue:
     prober: icmp
     timeout: 3s
@@ -17,6 +19,17 @@ modules:
       payload_size: 32
       dont_fragment: false
 
+  # ICMP module for external connectivity testing
+  icmp_external:
+    prober: icmp
+    timeout: 10s
+    icmp:
+      preferred_ip_protocol: ip4
+      source_ip_address: ""
+      payload_size: 64
+      dont_fragment: false
+
+  # HTTP 2xx module for web interface monitoring
   http_2xx:
     prober: http
     timeout: 5s
@@ -27,6 +40,7 @@ modules:
       headers:
         Host: example.com
         Accept-Language: en-US
+        User-Agent: "NetFlux5G-Blackbox-Exporter/1.0"
       no_follow_redirects: false
       fail_if_ssl: false
       fail_if_not_ssl: false
@@ -35,8 +49,184 @@ modules:
       preferred_ip_protocol: "ip4"
       ip_protocol_fallback: true
 
+  # HTTP module for Grafana monitoring
+  http_grafana:
+    prober: http
+    timeout: 10s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200, 302]
+      method: GET
+      headers:
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        User-Agent: "NetFlux5G-Monitor/1.0"
+      no_follow_redirects: true
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      preferred_ip_protocol: "ip4"
+
+  # HTTP module for API endpoints
+  http_api:
+    prober: http
+    timeout: 8s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200, 201, 204]
+      method: GET
+      headers:
+        Accept: "application/json"
+        Content-Type: "application/json"
+        User-Agent: "NetFlux5G-API-Monitor/1.0"
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      preferred_ip_protocol: "ip4"
+
+  # HTTP POST module for testing API write operations
+  http_post_json:
+    prober: http
+    timeout: 10s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200, 201, 202]
+      method: POST
+      headers:
+        Content-Type: "application/json"
+        Accept: "application/json"
+        User-Agent: "NetFlux5G-API-Post-Monitor/1.0"
+      body: '{"health_check": true, "timestamp": "{{ .timestamp }}"}'
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: false
+      preferred_ip_protocol: "ip4"
+
+  # HTTPS module with SSL verification
+  https_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: []
+      method: GET
+      headers:
+        Host: example.com
+        Accept-Language: en-US
+        User-Agent: "NetFlux5G-HTTPS-Monitor/1.0"
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: true
+      tls_config:
+        insecure_skip_verify: false
+        ca_file: ""
+        cert_file: ""
+        key_file: ""
+        server_name: ""
+      preferred_ip_protocol: "ip4"
+      ip_protocol_fallback: true
+
+  # HTTPS module without SSL verification (for self-signed certs)
+  https_2xx_insecure:
+    prober: http
+    timeout: 10s
+    http:
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: []
+      method: GET
+      headers:
+        User-Agent: "NetFlux5G-HTTPS-Insecure-Monitor/1.0"
+      no_follow_redirects: false
+      fail_if_ssl: false
+      fail_if_not_ssl: true
+      tls_config:
+        insecure_skip_verify: true
+      preferred_ip_protocol: "ip4"
+
+  # TCP connect module for basic port connectivity
   tcp_connect:
     prober: tcp
     timeout: 5s
     tcp:
       preferred_ip_protocol: ip4
+
+  # TCP connect module for database ports
+  tcp_connect_db:
+    prober: tcp
+    timeout: 8s
+    tcp:
+      preferred_ip_protocol: ip4
+      query_response:
+        - expect: ""
+
+  # TCP connect module for 5G Core SBI interfaces
+  tcp_connect_5g_sbi:
+    prober: tcp
+    timeout: 3s
+    tcp:
+      preferred_ip_protocol: ip4
+      tls: false
+
+  # TCP connect with TLS for secure 5G interfaces
+  tcp_connect_5g_tls:
+    prober: tcp
+    timeout: 5s
+    tcp:
+      preferred_ip_protocol: ip4
+      tls: true
+      tls_config:
+        insecure_skip_verify: true
+
+  # DNS module for resolution testing
+  dns_udp:
+    prober: dns
+    timeout: 5s
+    dns:
+      query_name: "google.com"
+      query_type: "A"
+      valid_rcodes:
+        - NOERROR
+      validate_answer_rrs:
+        fail_if_matches_regexp: []
+        fail_if_not_matches_regexp: []
+      validate_authority_rrs:
+        fail_if_matches_regexp: []
+        fail_if_not_matches_regexp: []
+      validate_additional_rrs:
+        fail_if_matches_regexp: []
+        fail_if_not_matches_regexp: []
+      preferred_ip_protocol: "ip4"
+      recursion_desired: true
+
+  # DNS over TCP module
+  dns_tcp:
+    prober: dns
+    timeout: 5s
+    dns:
+      transport_protocol: "tcp"
+      query_name: "google.com"
+      query_type: "A"
+      valid_rcodes:
+        - NOERROR
+      preferred_ip_protocol: "ip4"
+      recursion_desired: true
+
+  # gRPC health check for ONOS or other gRPC services
+  grpc_health:
+    prober: grpc
+    timeout: 10s
+    grpc:
+      tls: false
+      tls_config:
+        insecure_skip_verify: true
+      preferred_ip_protocol: "ip4"
+      service: "grpc.health.v1.Health"
+
+  # gRPC with TLS
+  grpc_health_tls:
+    prober: grpc
+    timeout: 10s
+    grpc:
+      tls: true
+      tls_config:
+        insecure_skip_verify: true
+      preferred_ip_protocol: "ip4"
+      service: "grpc.health.v1.Health"
