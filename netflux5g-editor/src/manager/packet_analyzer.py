@@ -103,9 +103,6 @@ class PacketAnalyzerDeploymentWorker(QThread):
             builder.add_env('SHARKD_SOCKET=/captures/sharkd.sock')
             builder.add_env('CAPTURES_PATH=/captures/')
             
-            # Add restart policy for better reliability
-            builder.add_restart_policy('unless-stopped')
-            
             self.status_updated.emit("Deploying Webshark container...")
             self.progress_updated.emit(50)
             
@@ -337,9 +334,6 @@ class PacketAnalyzerManager:
             # Environment variables matching your entrypoint expectations  
             builder.add_env('SHARKD_SOCKET=/captures/sharkd.sock')
             builder.add_env('CAPTURES_PATH=/captures/')
-            
-            # Add restart policy
-            builder.add_restart_policy('unless-stopped')
             
             success, msg = builder.run()
             
