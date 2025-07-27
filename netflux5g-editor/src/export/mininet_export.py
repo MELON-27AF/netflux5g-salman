@@ -19,8 +19,8 @@ import re
 import traceback
 from PyQt5.QtWidgets import QFileDialog, QMessageBox
 from PyQt5.QtCore import QDateTime
-from manager.configmap import ConfigurationMapper
-from manager.debug import debug_print, error_print, warning_print
+from utils.configmap import ConfigurationMapper
+from utils.debug import debug_print, error_print, warning_print
 
 class MininetExporter:
     """Handler for exporting network topology to Mininet scripts with Level 2 features."""
@@ -57,7 +57,7 @@ class MininetExporter:
         nodes, links = self.main_window.extractTopology()
         
         if not nodes:
-            self.main_window.showCanvasStatus("No components found to export!")
+            self.main_window.status_manager.showCanvasStatus("No components found to export!")
             return
         
         # Categorize nodes by type for proper script generation
@@ -70,14 +70,13 @@ class MininetExporter:
             with open(filename, "w") as f:
                 self.write_mininet_script(f, nodes, links, categorized_nodes)
             
-            self.main_window.showCanvasStatus(f"Exported topology to {os.path.basename(filename)}")
+            self.main_window.status_manager.showCanvasStatus(f"Exported topology to {os.path.basename(filename)}")
             debug_print(f"DEBUG: Exported {len(nodes)} nodes and {len(links)} links to {filename}")
             
         except Exception as e:
             error_msg = f"Error exporting to Mininet: {str(e)}"
-            self.main_window.showCanvasStatus(error_msg)
+            self.main_window.status_manager.showCanvasStatus(error_msg)
             error_print(f"ERROR: {error_msg}")
-            import traceback
             traceback.print_exc()
 
     def categorize_nodes(self, nodes):
@@ -495,11 +494,12 @@ class MininetExporter:
             ap_params.append(f"mode='{mode}'")
             ap_params.append(f"position='{position}'")
             
-            # Add power configuration for radio propagation
-            from manager.configmap import ConfigurationMapper
+            # Add power configuration for radio propagation (power-based approach)
+            from utils.configmap import ConfigurationMapper
             ap_config_opts = ConfigurationMapper.map_ap_config(props)
             for opt in ap_config_opts:
-                if 'txpower=' in opt or 'range=' in opt:
+                # Only add txpower, not explicit range - let mininet-wifi calculate range from power
+                if 'txpower=' in opt:
                     ap_params.append(opt)
             
             ap_params.append('protocols="OpenFlow13"')
@@ -524,7 +524,7 @@ class MininetExporter:
             sta_params.append(f"position='{position}'")
             
             # Add configuration options from ConfigurationMapper
-            from manager.configmap import ConfigurationMapper
+            from utils.configmap import ConfigurationMapper
             sta_opts = ConfigurationMapper.map_sta_config(props)
             sta_params.extend(sta_opts)
             
@@ -545,7 +545,7 @@ class MininetExporter:
             
             # Add IP if specified
             ip_addr = props.get('Host_IPAddress', props.get('lineEdit_2'))
-            if ip_addr and str(ip_addr).strip() and str(ip_addr).strip() != "192.168.1.1":
+            if ip_addr and str(ip_addr).strip() and str(ip_addr).strip() != "10.0.0.1":
                 host_params.append(f"ip='{ip_addr}'")
             
             # Add MAC if specified
@@ -619,7 +619,7 @@ class MininetExporter:
             
             # Add IP if specified
             ip_addr = props.get('DockerHost_IPAddress', props.get('lineEdit_2'))
-            if ip_addr and str(ip_addr).strip() and str(ip_addr).strip() != "192.168.1.1":
+            if ip_addr and str(ip_addr).strip() and str(ip_addr).strip() != "10.0.0.1":
                 host_params.append(f"ip='{ip_addr}'")
             
             # Add MAC if specified
@@ -667,7 +667,8 @@ class MininetExporter:
                 # Add volumes for host hardware access and OVS functionality
                 volumes = [
                     f'"/lib/modules:/lib/modules:ro"',
-                    f'export_dir + "/log-{gnb_name}/:/logging/"'
+                    f'export_dir + "/log/:/logging/"',
+                    f'os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(export_dir))), "automation", "webshark") + "/captures/:/captures/"'
                 ]
                 gnb_params.append(f'volumes=[{", ".join(volumes)}]')
                 
@@ -676,7 +677,7 @@ class MininetExporter:
                 gnb_params.append(f"position='{position}'")
                 
                 # Get enhanced configuration from ConfigurationMapper
-                from manager.configmap import ConfigurationMapper
+                from utils.configmap import ConfigurationMapper
                 gnb_config = ConfigurationMapper.map_gnb_config(props)
                 
                 # Add txpower if specified (default 30)
@@ -731,13 +732,19 @@ class MininetExporter:
                 
                 # Create separate AP node if AP functionality is enabled
                 if ap_config.get('AP_ENABLED') == 'true':
-                    ap_name = f"ap{100 + i}"  # ap101, ap102, etc.
+                    # Extract number from gNB name (e.g., GNB__4 -> 4, GNB__2 -> 2)
+                    import re
+                    gnb_number_match = re.search(r'(\d+)', gnb_name)
+                    if gnb_number_match:
+                        gnb_number = gnb_number_match.group(1)
+                        ap_name = f"ap{100 + int(gnb_number)}"  # ap104, ap102, etc.
+                    else:
+                        ap_name = f"ap{100 + i}"  # fallback to original logic
                     
-                    # Extract AP parameters from configuration
+                    # Extract AP parameters from configuration (power-based approach)
                     ap_ssid = ap_config.get('AP_SSID', f'{gnb_config.get("gnb_hostname", f"gnb{i}")}-ssid')
                     ap_channel = ap_config.get('AP_CHANNEL', '36')
                     ap_mode = ap_config.get('AP_MODE', 'a')
-                    ap_range = ap_config.get('AP_RANGE', 600.0)
                     ap_txpower = ap_config.get('AP_TXPOWER', 24.0)
                     
                     # Use OVS configuration for AP if OVS is enabled
@@ -751,10 +758,11 @@ class MininetExporter:
                         protocols = 'OpenFlow13'
                     
                     # Create AP with same position as gNB (slightly offset)
-                    ap_position = f"{gnb.get('x', 0) - 2.3:.1f},{gnb.get('y', 0):.1f},0"
+                    ap_position = f"{gnb.get('x', 0):.1f},{gnb.get('y', 0):.1f},0"
                     
+                    # Generate AP without explicit range - let mininet-wifi calculate from txpower
                     f.write(f'    {ap_name} = net.addAccessPoint(\'{ap_name}\', cls=OVSKernelAP, ssid=\'{ap_ssid}\', failMode=\'{fail_mode}\', datapath=\'{datapath}\',\n')
-                    f.write(f'                             channel=\'{ap_channel}\', mode=\'{ap_mode}\', position=\'{ap_position}\', range={ap_range}, txpower={ap_txpower}, protocols="{protocols}")\n')
+                    f.write(f'                             channel=\'{ap_channel}\', mode=\'{ap_mode}\', position=\'{ap_position}\', txpower={ap_txpower}, protocols="{protocols}")\n')
                     f.write('\n')
                     
                     # Store AP information for later use in link creation
@@ -785,19 +793,16 @@ class MininetExporter:
 
                 # Add volumes for host hardware access and OVS functionality
                 volumes = [
-                    f'export_dir + "/log-{ue_name}/:/logging/"'
+                    f'export_dir + "/log/:/logging/"',
+                    f'os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(export_dir))), "automation", "webshark") + "/captures/:/captures/"'
                 ]
                 ue_params.append(f'volumes=[{", ".join(volumes)}]')
 
-                # Add enhanced power and range configuration from ConfigurationMapper
-                from manager.configmap import ConfigurationMapper
+                # Add power-based configuration (remove explicit range)
+                from utils.configmap import ConfigurationMapper
                 ue_config = ConfigurationMapper.map_ue_config(props)
                 
-                # Add range (default 116 if not specified)
-                range_val = ue_config.get('range', 116)
-                ue_params.append(f'range={range_val}')
-                
-                # Add txpower if specified
+                # Add txpower - let mininet-wifi calculate range from power
                 if 'txpower' in ue_config:
                     ue_params.append(f"txpower={ue_config['txpower']}")
                 
@@ -897,7 +902,7 @@ class MininetExporter:
         core_components = self.extract_5g_components_by_type(categorized_nodes['core5g'])
         
         # Import configuration mapper for VGcore properties
-        from manager.configmap import ConfigurationMapper
+        from utils.configmap import ConfigurationMapper
         
         # Get VGcore component configuration (if available)
         vgcore_config = {}
@@ -1132,7 +1137,7 @@ class MininetExporter:
                     # Debug output for config file mapping
                     f.write(f'    info("      Config file: {config_filename}\\n")\n')
                     
-                    comp_params.append(f'volumes=[export_dir + "/5g-configs/{config_filename}:/opt/open5gs/etc/open5gs/{comp_type.lower()}.yaml", export_dir + "/log-{comp_name.lower()}/:/logging/"]')
+                    comp_params.append(f'volumes=[export_dir + "/5g-configs/{config_filename}:/opt/open5gs/etc/open5gs/{comp_type.lower()}.yaml", export_dir + "/log/:/logging/", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(export_dir))), "automation", "webshark") + "/captures/:/captures/"]')
 
                     # Add environment variables for configuration
                     if 'env_vars' in config and config['env_vars']:
@@ -1625,7 +1630,6 @@ class MininetExporter:
 
     def sanitize_variable_name(self, name):
         """Convert display name to valid Python variable name."""
-        import re
         # Remove special characters and spaces
         clean_name = re.sub(r'[^a-zA-Z0-9_]', '_', str(name))
         # Ensure it starts with a letter or underscore

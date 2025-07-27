@@ -16,17 +16,17 @@ from manager.canvas import CanvasManager
 from manager.automation import AutomationManager
 from manager.keyboard import KeyboardManager
 from manager.component_operations import ComponentOperationsManager
-from manager.debug import DebugManager, debug_print, error_print, warning_print, set_debug_enabled, is_debug_enabled
+from utils.debug import debug_print, error_print, warning_print, set_debug_enabled, is_debug_enabled
 from manager.welcome import WelcomeScreenManager
 from manager.docker_network import DockerNetworkManager
 from manager.database import DatabaseManager
 from manager.monitoring import MonitoringManager
 from manager.controller import ControllerManager
 from manager.packet_analyzer import PacketAnalyzerManager
-from manager.template_updater import TemplateUpdater
+from utils.template_updater import TemplateUpdater
 
 # Import existing modules
-from gui.canvas import Canvas, MovableLabel
+from gui.canvas import Canvas
 from gui.toolbar import ToolbarFunctions
 from export.mininet_export import MininetExporter
 from automation.automation_runner import AutomationRunner
@@ -224,9 +224,9 @@ class NetFlux5GApp(QMainWindow):
             if hasattr(self, 'actionStop_All'):
                 self.actionStop_All.triggered.connect(self.automation_manager.stopAllComponents)
             if hasattr(self, 'actionRunAll'):
-                self.actionRunAll.triggered.connect(self.automation_manager.runAllComponents)
+                self.actionRunAll.triggered.connect(self.automation_manager.runTopology)
             if hasattr(self, 'actionStopAll'):
-                self.actionStopAll.triggered.connect(self.automation_manager.stopAllComponents)
+                self.actionStopAll.triggered.connect(self.automation_manager.stopTopology)
             if hasattr(self, 'actionRun'):
                 self.actionRun.triggered.connect(self.automation_manager.runTopology)
             if hasattr(self, 'actionStop'):
@@ -262,17 +262,21 @@ class NetFlux5GApp(QMainWindow):
             if hasattr(self, 'actionStop_Packet_Analyzer'):
                 self.actionStop_Packet_Analyzer.triggered.connect(self.packet_analyzer_manager.stopPacketAnalyzer)
 
-            # Controller connections
+            # Ryu Controller connections
             if hasattr(self, 'actionDeploy_Ryu_Controller'):
-                self.actionDeploy_Ryu_Controller.triggered.connect(self.controller_manager.deployController)
+                self.actionDeploy_Ryu_Controller.triggered.connect(self.controller_manager.deployRyuController)
             if hasattr(self, 'actionStop_Ryu_Controller'):
-                self.actionStop_Ryu_Controller.triggered.connect(self.controller_manager.stopController)
+                self.actionStop_Ryu_Controller.triggered.connect(self.controller_manager.stopRyuController)
             
             # ONOS Controller connections
             if hasattr(self, 'actionDeploy_ONOS_Controller'):
                 self.actionDeploy_ONOS_Controller.triggered.connect(self.controller_manager.deployOnosController)
             if hasattr(self, 'actionStop_ONOS_Controller'):
                 self.actionStop_ONOS_Controller.triggered.connect(self.controller_manager.stopOnosController)
+
+            # Clear MongoDB data
+            if hasattr(self, 'actionClear_DB_Data'):
+                self.actionClear_DB_Data.triggered.connect(self.database_manager.cleanupDatabase)
 
             # Component button connections
             if hasattr(self.component_panel_manager, 'component_widgets'):
@@ -310,9 +314,6 @@ class NetFlux5GApp(QMainWindow):
             # Connect splitter moved signal to handler
             if hasattr(self, 'splitter'):
                 self.splitter.splitterMoved.connect(self.onSplitterMoved)
-
-            # Connect automation runner signals
-            self.automation_runner.execution_finished.connect(self.automation_manager.onAutomationFinished)
 
             debug_print("DEBUG: All connections setup successfully")
             
@@ -520,10 +521,6 @@ class NetFlux5GApp(QMainWindow):
                     return
                 # If Discard was chosen, continue with closing
             
-            # Stop any running automation
-            if hasattr(self, 'automation_runner'):
-                self.automation_runner.stop_all()
-            
             # Clear component operations clipboard
             if hasattr(self, 'component_operations_manager'):
                 self.component_operations_manager.clearClipboard()
@@ -550,7 +547,7 @@ class NetFlux5GApp(QMainWindow):
         
         event.accept()
 
-    def showCanvasStatus(self, message, timeout=0):
+    def showCanvasStatus(self, message, timeout=1):
         """Wrapper method for status manager."""
         self.status_manager.showCanvasStatus(message, timeout)
 

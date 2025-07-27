@@ -3,8 +3,7 @@ from PyQt5.QtWidgets import QMainWindow, QLineEdit, QComboBox, QCheckBox, QTable
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
 from PyQt5 import uic
-import yaml
-from manager.debug import debug_print, error_print, warning_print
+from utils.debug import debug_print, error_print, warning_print
 
 class BasePropertiesWindow(QMainWindow):
     """Base class for all properties windows that automatically sets the icon."""
@@ -32,7 +31,7 @@ class BasePropertiesWindow(QMainWindow):
         pass
 
     def saveProperties(self):
-        """Save all UI values to the component's properties, including 5G component tables."""
+        """Save all UI values to the component's properties with validation and cleanup."""
         if not self.component:
             warning_print("WARNING: No component reference to save properties to")
             return
@@ -43,13 +42,17 @@ class BasePropertiesWindow(QMainWindow):
         for widget in self.findChildren(QLineEdit):
             name = widget.objectName()
             if name:  # Only save if the widget has a name
-                properties[name] = widget.text()
+                value = widget.text().strip()
+                if value:  # Only save non-empty values
+                    properties[name] = value
                 
         # Collect all QComboBox values
         for widget in self.findChildren(QComboBox):
             name = widget.objectName()
             if name:
-                properties[name] = widget.currentText()
+                value = widget.currentText().strip()
+                if value:  # Only save non-empty values
+                    properties[name] = value
                 
         # Collect all QCheckBox values
         for widget in self.findChildren(QCheckBox):
@@ -61,33 +64,47 @@ class BasePropertiesWindow(QMainWindow):
         for widget in self.findChildren(QSpinBox):
             name = widget.objectName()
             if name:
-                properties[name] = widget.value()
+                value = widget.value()
+                if value != 0:  # Only save non-zero values
+                    properties[name] = value
 
         # Collect all QDoubleSpinBox values
         for widget in self.findChildren(QDoubleSpinBox):
             name = widget.objectName()
             if name:
-                properties[name] = widget.value()
+                value = widget.value()
+                if value != 0.0:  # Only save non-zero values
+                    properties[name] = value
                 
         # Collect all QTextEdit values
         for widget in self.findChildren(QTextEdit):
             name = widget.objectName()
             if name:
-                properties[name] = widget.toPlainText()
+                value = widget.toPlainText().strip()
+                if value:  # Only save non-empty values
+                    properties[name] = value
                 
         # Collect all QPlainTextEdit values
         for widget in self.findChildren(QPlainTextEdit):
             name = widget.objectName()
             if name:
-                properties[name] = widget.toPlainText()
+                value = widget.toPlainText().strip()
+                if value:  # Only save non-empty values
+                    properties[name] = value
         
         # For Component5GPropertiesWindow, also save table data
         if isinstance(self, Component5GPropertiesWindow):
             self.save5GComponentTableData(properties)
         
+        # Clean up properties - remove any None or empty string values
+        cleaned_properties = {}
+        for key, value in properties.items():
+            if value is not None and value != '':
+                cleaned_properties[key] = value
+        
         # Save to component
-        self.component.setProperties(properties)
-        debug_print(f"DEBUG: Saved properties for {self.component_name}: {len(properties)} properties")
+        self.component.setProperties(cleaned_properties)
+        debug_print(f"DEBUG: Saved {len(cleaned_properties)} properties for {self.component_name}")
         
         # Mark topology as modified when component properties are changed
         scene = self.component.scene()
@@ -97,7 +114,7 @@ class BasePropertiesWindow(QMainWindow):
                 view.app_instance.onTopologyChanged()
 
     def save5GComponentTableData(self, properties):
-        """Save data from all 5G component tables."""
+        """Save data from all 5G component tables with cleaned structure."""
         component_types = ['UPF', 'AMF', 'SMF', 'NRF', 'SCP', 'AUSF', 'BSF', 'NSSF', 'PCF', 'UDM', 'UDR']
         
         for component_type in component_types:
@@ -120,32 +137,40 @@ class BasePropertiesWindow(QMainWindow):
                 # Extract table data
                 table_data = []
                 for row in range(table.rowCount()):
-                    row_data = {}
+                    row_data = {
+                        'name': '',
+                        'config_display': '',
+                        'config_path': '',
+                        'config_file_path': '',
+                        'config_filename': '',
+                        'config_content': None,
+                        'imported': False,
+                        'image': 'adaptive/open5gs:1.0',
+                        'component_type': component_type,
+                        'volumes': []
+                    }
                     
                     # Name (column 0)
                     name_item = table.item(row, 0)
-                    if name_item:
-                        row_data['name'] = name_item.text()
+                    if name_item and name_item.text().strip():
+                        row_data['name'] = name_item.text().strip()
                     else:
                         row_data['name'] = f"{component_type.lower()}{row + 1}"
                     
                     # Config file info (column 1)
                     config_item = table.item(row, 1)
                     if config_item:
-                        config_text = config_item.text()
-                        row_data['config_display'] = config_text
+                        config_text = config_item.text().strip()
+                        row_data['config_display'] = config_text if config_text else "(Double-click to import)"
                         
                         # Check if this row has imported configuration data
-                        if hasattr(config_item, 'config_data'):
+                        if hasattr(config_item, 'config_data') and config_item.config_data:
                             row_data['config_content'] = config_item.config_data
                             row_data['imported'] = True
-                            row_data['config_filename'] = getattr(config_item, 'config_filename', 'imported.yaml')
+                            row_data['config_filename'] = getattr(config_item, 'config_filename', f"{component_type.lower()}.yaml")
                             # Store the file path if available
-                            if hasattr(config_item, 'config_file_path'):
-                                row_data['config_file_path'] = config_item.config_file_path
-                            else:
-                                row_data['config_file_path'] = ''
-                        elif hasattr(config_item, 'config_file_path'):
+                            row_data['config_file_path'] = getattr(config_item, 'config_file_path', '')
+                        elif hasattr(config_item, 'config_file_path') and config_item.config_file_path:
                             row_data['config_file_path'] = config_item.config_file_path
                             row_data['imported'] = True
                             row_data['config_filename'] = os.path.basename(config_item.config_file_path)
@@ -155,63 +180,73 @@ class BasePropertiesWindow(QMainWindow):
                         else:
                             row_data['imported'] = False
                             row_data['config_filename'] = f"{component_type.lower()}.yaml"
-                            row_data['config_file_path'] = ''
                     else:
                         row_data['config_display'] = "(Double-click to import)"
                         row_data['imported'] = False
                         row_data['config_filename'] = f"{component_type.lower()}.yaml"
-                        row_data['config_file_path'] = ''
                     
                     # Config Path (column 2, if exists)
                     if table.columnCount() > 2:
                         config_path_item = table.item(row, 2)
-                        if config_path_item:
-                            row_data['config_path'] = config_path_item.text()
-                        else:
-                            row_data['config_path'] = ""
-                    else:
-                        row_data['config_path'] = ""
+                        if config_path_item and config_path_item.text().strip():
+                            row_data['config_path'] = config_path_item.text().strip()
                     
-                    # Add default values
-                    row_data['image'] = 'adaptive/open5gs:1.0'
-                    row_data['component_type'] = component_type
-                    row_data['volumes'] = []
-                    
-                    table_data.append(row_data)
+                    # Only add non-empty configurations
+                    if row_data['name'] and (row_data['imported'] or row_data['config_display'] != "(Double-click to import)"):
+                        table_data.append(row_data)
                 
                 # Store in properties with a key specific to this component type
-                config_key = f"{component_type}_configs"
-                properties[config_key] = table_data
-                
-                debug_print(f"DEBUG: Saved {len(table_data)} {component_type} configurations")
+                if table_data:  # Only store if we have actual data
+                    config_key = f"{component_type}_configs"
+                    properties[config_key] = table_data
+                    debug_print(f"DEBUG: Saved {len(table_data)} {component_type} configurations")
+                else:
+                    debug_print(f"DEBUG: No valid {component_type} configurations to save")
 
     def loadProperties(self):
-        """Load component properties into UI widgets, including 5G component tables."""
+        """Load component properties into UI widgets with validation and error handling."""
         if not self.component:
+            warning_print("WARNING: No component reference to load properties from")
             return
             
         properties = self.component.getProperties()
+        if not properties:
+            debug_print("DEBUG: No properties to load")
+            return
         
         # Load values into QLineEdit widgets
         for widget in self.findChildren(QLineEdit):
             name = widget.objectName()
             if name in properties:
-                widget.setText(str(properties[name]))
+                try:
+                    widget.setText(str(properties[name]))
+                except Exception as e:
+                    warning_print(f"WARNING: Failed to load LineEdit {name}: {e}")
                 
         # Load values into QComboBox widgets
         for widget in self.findChildren(QComboBox):
             name = widget.objectName()
             if name in properties:
-                text = str(properties[name])
-                index = widget.findText(text)
-                if index >= 0:
-                    widget.setCurrentIndex(index)
+                try:
+                    text = str(properties[name])
+                    index = widget.findText(text)
+                    if index >= 0:
+                        widget.setCurrentIndex(index)
+                    else:
+                        # If exact match not found, try to add the item
+                        widget.addItem(text)
+                        widget.setCurrentText(text)
+                except Exception as e:
+                    warning_print(f"WARNING: Failed to load ComboBox {name}: {e}")
                     
         # Load values into QCheckBox widgets
         for widget in self.findChildren(QCheckBox):
             name = widget.objectName()
             if name in properties:
-                widget.setChecked(bool(properties[name]))
+                try:
+                    widget.setChecked(bool(properties[name]))
+                except Exception as e:
+                    warning_print(f"WARNING: Failed to load CheckBox {name}: {e}")
 
         # Load values into QSpinBox widgets
         for widget in self.findChildren(QSpinBox):
@@ -221,39 +256,59 @@ class BasePropertiesWindow(QMainWindow):
                     # Accept float strings by converting to float first, then int
                     value = properties[name]
                     if isinstance(value, str):
-                        value = int(float(value))
+                        if value.strip():  # Only convert non-empty strings
+                            value = int(float(value))
+                        else:
+                            continue
                     else:
                         value = int(value)
                     widget.setValue(value)
-                except (ValueError, TypeError):
-                    pass
+                except (ValueError, TypeError) as e:
+                    warning_print(f"WARNING: Failed to load SpinBox {name}: {e}")
 
         # Load values into QDoubleSpinBox widgets
         for widget in self.findChildren(QDoubleSpinBox):
             name = widget.objectName()
             if name in properties:
                 try:
-                    widget.setValue(float(properties[name]))
-                except (ValueError, TypeError):
-                    pass
+                    value = properties[name]
+                    if isinstance(value, str):
+                        if value.strip():  # Only convert non-empty strings
+                            value = float(value)
+                        else:
+                            continue
+                    else:
+                        value = float(value)
+                    widget.setValue(value)
+                except (ValueError, TypeError) as e:
+                    warning_print(f"WARNING: Failed to load DoubleSpinBox {name}: {e}")
                     
         # Load values into QTextEdit widgets
         for widget in self.findChildren(QTextEdit):
             name = widget.objectName()
             if name in properties:
-                widget.setPlainText(str(properties[name]))
+                try:
+                    widget.setPlainText(str(properties[name]))
+                except Exception as e:
+                    warning_print(f"WARNING: Failed to load TextEdit {name}: {e}")
                 
         # Load values into QPlainTextEdit widgets
         for widget in self.findChildren(QPlainTextEdit):
             name = widget.objectName()
             if name in properties:
-                widget.setPlainText(str(properties[name]))
+                try:
+                    widget.setPlainText(str(properties[name]))
+                except Exception as e:
+                    warning_print(f"WARNING: Failed to load PlainTextEdit {name}: {e}")
         
         # For Component5GPropertiesWindow, also load table data
-        self.load5GComponentTableData(properties)
+        if isinstance(self, Component5GPropertiesWindow):
+            self.load5GComponentTableData(properties)
+        
+        debug_print(f"DEBUG: Loaded properties for {self.component_name}")
         
     def load5GComponentTableData(self, properties):
-        """Load data into all 5G component tables."""
+        """Load data into all 5G component tables with validation."""
         component_types = ['UPF', 'AMF', 'SMF', 'NRF', 'SCP', 'AUSF', 'BSF', 'NSSF', 'PCF', 'UDM', 'UDR']
         
         for component_type in component_types:
@@ -263,6 +318,7 @@ class BasePropertiesWindow(QMainWindow):
                 
             table_data = properties[config_key]
             if not isinstance(table_data, list):
+                warning_print(f"WARNING: Invalid table data format for {component_type}")
                 continue
                 
             # Find the table
@@ -281,6 +337,7 @@ class BasePropertiesWindow(QMainWindow):
                     break
             
             if not table or not hasattr(table, 'setRowCount'):
+                warning_print(f"WARNING: Table not found for {component_type}")
                 continue
                 
             # Clear existing rows
@@ -288,29 +345,36 @@ class BasePropertiesWindow(QMainWindow):
             
             # Load each row
             for i, row_data in enumerate(table_data):
+                if not isinstance(row_data, dict):
+                    warning_print(f"WARNING: Invalid row data format for {component_type} row {i}")
+                    continue
+                    
                 table.insertRow(i)
                 
                 # Name (column 0)
-                name_item = QTableWidgetItem(row_data.get('name', f"{component_type.lower()}{i + 1}"))
+                name_value = row_data.get('name', f"{component_type.lower()}{i + 1}")
+                name_item = QTableWidgetItem(str(name_value))
                 table.setItem(i, 0, name_item)
                 
                 # Config file info (column 1)
-                config_item = QTableWidgetItem(row_data.get('config_display', '(Double-click to import)'))
+                config_display = row_data.get('config_display', '(Double-click to import)')
+                config_item = QTableWidgetItem(str(config_display))
                 config_item.setToolTip("Double-click to import YAML configuration file")
                 
                 # Restore imported configuration data to the item
                 if row_data.get('imported', False):
-                    if 'config_content' in row_data:
+                    if 'config_content' in row_data and row_data['config_content']:
                         config_item.config_data = row_data['config_content']
-                        config_item.config_filename = row_data.get('config_filename', 'imported.yaml')
-                    if 'config_file_path' in row_data:
+                        config_item.config_filename = row_data.get('config_filename', f"{component_type.lower()}.yaml")
+                    if 'config_file_path' in row_data and row_data['config_file_path']:
                         config_item.config_file_path = row_data['config_file_path']
                         
                 table.setItem(i, 1, config_item)
                 
                 # Config Path (column 2, if exists)
                 if table.columnCount() > 2:
-                    config_path_item = QTableWidgetItem(row_data.get('config_path', ''))
+                    config_path_value = row_data.get('config_path', '')
+                    config_path_item = QTableWidgetItem(str(config_path_value))
                     config_path_item.setToolTip("Path to imported configuration file")
                     table.setItem(i, 2, config_path_item)
             
@@ -376,6 +440,27 @@ class APPropertiesWindow(BasePropertiesWindow):
             self.AP_OKButton.clicked.connect(self.onOK)
         if hasattr(self, 'AP_CancelButton'):
             self.AP_CancelButton.clicked.connect(self.onCancel)
+        
+        # Connect power change to range calculation
+        if hasattr(self, 'AP_Power'):
+            self.AP_Power.valueChanged.connect(self.updateRangeDisplay)
+            # Initial range calculation
+            self.updateRangeDisplay()
+        
+    def updateRangeDisplay(self):
+        """Update the calculated range display based on power value."""
+        if hasattr(self, 'AP_Power') and hasattr(self, 'AP_RangeCalculated'):
+            try:
+                from utils.power_range_calculator import PowerRangeCalculator
+                power_value = self.AP_Power.value()
+                
+                # Create mock properties for calculation
+                mock_properties = {'AP_Power': power_value}
+                calculated_range = PowerRangeCalculator.get_component_range("AP", mock_properties)
+                
+                self.AP_RangeCalculated.setText(f"~{calculated_range:.0f}m (calculated from {power_value}dBm)")
+            except Exception as e:
+                self.AP_RangeCalculated.setText(f"Range calculation error: {str(e)}")
         
     def onOK(self):
         self.saveProperties()
@@ -462,6 +547,27 @@ class GNBPropertiesWindow(BasePropertiesWindow):
         # Connect OVS enable checkbox to enable/disable OVS configuration widgets
         if hasattr(self, 'GNB_OVS_Enabled'):
             self.GNB_OVS_Enabled.toggled.connect(self.onOVSEnabledToggled)
+        
+        # Connect power change to range calculation
+        if hasattr(self, 'GNB_Power'):
+            self.GNB_Power.valueChanged.connect(self.updateRangeDisplay)
+            # Initial range calculation
+            self.updateRangeDisplay()
+            
+    def updateRangeDisplay(self):
+        """Update the calculated range display based on power value."""
+        if hasattr(self, 'GNB_Power') and hasattr(self, 'GNB_RangeCalculated'):
+            try:
+                from utils.power_range_calculator import PowerRangeCalculator
+                power_value = self.GNB_Power.value()
+                
+                # Create mock properties for calculation
+                mock_properties = {'GNB_Power': power_value}
+                calculated_range = PowerRangeCalculator.get_component_range("GNB", mock_properties)
+                
+                self.GNB_RangeCalculated.setText(f"~{calculated_range:.0f}m (calculated from {power_value}dBm)")
+            except Exception as e:
+                self.GNB_RangeCalculated.setText(f"Range calculation error: {str(e)}")
     
     def setupDefaultValues(self):
         """Setup default values for the enhanced gNB configuration"""
@@ -625,8 +731,7 @@ class GNBPropertiesWindow(BasePropertiesWindow):
         
         if hasattr(self, 'GNB_Power'):
             config['txpower'] = self.GNB_Power.value()
-        if hasattr(self, 'GNB_Range'):
-            config['range'] = self.GNB_Range.value()
+        # Range is now calculated from power, not set manually
             
         return config
         
@@ -690,6 +795,27 @@ class UEPropertiesWindow(BasePropertiesWindow):
         # Connect OK and Cancel buttons
         self.UE_OKButton.clicked.connect(self.onOK)
         self.UE_CancelButton.clicked.connect(self.onCancel)
+        
+        # Connect power change to range calculation
+        if hasattr(self, 'UE_Power'):
+            self.UE_Power.valueChanged.connect(self.updateRangeDisplay)
+            # Initial range calculation
+            self.updateRangeDisplay()
+            
+    def updateRangeDisplay(self):
+        """Update the calculated range display based on power value."""
+        if hasattr(self, 'UE_Power') and hasattr(self, 'UE_RangeCalculated'):
+            try:
+                from utils.power_range_calculator import PowerRangeCalculator
+                power_value = self.UE_Power.value()
+                
+                # Create mock properties for calculation
+                mock_properties = {'UE_Power': power_value}
+                calculated_range = PowerRangeCalculator.get_component_range("UE", mock_properties)
+                
+                self.UE_RangeCalculated.setText(f"~{calculated_range:.0f}m (calculated from {power_value}dBm)")
+            except Exception as e:
+                self.UE_RangeCalculated.setText(f"Range calculation error: {str(e)}")
     
     def setupDefaultValues(self):
         """Setup default values for the UE configuration"""
