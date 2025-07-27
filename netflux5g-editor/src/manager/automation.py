@@ -1,410 +1,493 @@
-"""
-Enhanced Monitoring deployment manager for NetFlux5G Editor
-Handles Prometheus, Grafana, Blackbox Exporter, and other monitoring container creation and removal using DockerUtils and DockerContainerBuilder
-"""
-
-import os
-import time
-from PyQt5.QtWidgets import QMessageBox, QProgressDialog
-from PyQt5.QtCore import pyqtSignal, QThread, QMutex
+from PyQt5.QtCore import QTimer
+from PyQt5.QtWidgets import QMessageBox, QInputDialog, QProgressDialog
 from utils.debug import debug_print, error_print, warning_print
-from utils.docker_utils import DockerUtils, DockerContainerBuilder
+import os
+import subprocess
 
-cwd = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-class MonitoringDeploymentWorker(QThread):
-    """Worker thread for monitoring operations to avoid blocking the UI."""
-    
-    progress_updated = pyqtSignal(int)
-    status_updated = pyqtSignal(str)
-    operation_finished = pyqtSignal(bool, str)  # success, message
-    
-    def __init__(self, operation, container_prefix=None, network_name=None):
-        super().__init__()
-        self.operation = operation  # 'deploy', 'stop', or 'cleanup'
-        self.container_prefix = "netflux5g"  # Fixed prefix for all deployments
-        self.network_name = "netflux5g"
-        self.mutex = QMutex()
-        
-    def run(self):
-        try:
-            if self.operation == 'deploy':
-                self._deploy_monitoring()
-            elif self.operation == 'stop':
-                self._stop_monitoring()
-            elif self.operation == 'cleanup':
-                self._cleanup_monitoring()
-        except Exception as e:
-            error_print(f"Monitoring operation failed: {e}")
-            self.operation_finished.emit(False, str(e))
-
-    monitoring_containers = {
-        'prometheus': {
-            'image': 'prom/prometheus',
-            'ports': ['9090:9090'],
-            'volumes': [
-                cwd + '/automation/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml',
-                cwd + '/automation/monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml'
-            ]
-        },
-        'grafana': {
-            'image': 'grafana/grafana',
-            'ports': ['3000:3000'],
-            'volumes': [
-                cwd + '/automation/monitoring/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml',
-                cwd + '/automation/monitoring/grafana/dashboard.json:/var/lib/grafana/dashboards/dashboard.json',
-                cwd + '/automation/monitoring/grafana/default.yaml:/etc/grafana/provisioning/dashboards/default.yaml'
-            ],
-            'env': [
-                'GF_PATHS_PROVISIONING=/etc/grafana/provisioning',
-                'DS_PROMETHEUS=prometheus'
-            ]
-        },
-        'node-exporter': {
-            'image': 'prom/node-exporter:latest',
-            'ports': ['9100:9100'],
-            'volumes': ['/:/host:ro,rslave'],
-            'extra_args': ['--path.rootfs=/host'],
-            'pid_mode': 'host'
-        },
-        'cadvisor': {
-            'image': 'gcr.io/cadvisor/cadvisor:latest',
-            'ports': ['8080:8080'],
-            'volumes': [
-                '/:/rootfs:ro',
-                '/var/run:/var/run:ro', 
-                '/sys:/sys:ro',
-                '/var/lib/docker/:/var/lib/docker:ro',
-                '/dev/disk/:/dev/disk:ro'
-            ],
-            'privileged': True
-        },
-        'blackbox-exporter': {
-            'image': 'prom/blackbox-exporter:latest',
-            'ports': ['9115:9115'],
-            'volumes': [
-                cwd + '/automation/monitoring/blackbox/config.yml:/etc/blackbox_exporter/config.yml'
-            ]
-        },
-        'alertmanager': {
-            'image': 'prom/alertmanager:latest',
-            'ports': ['9093:9093'],
-            'volumes': [
-                cwd + '/automation/monitoring/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml'
-            ]
-        }
-    }
-
-    def _deploy_monitoring(self):
-        try:
-            self.status_updated.emit("Starting monitoring deployment...")
-            self.progress_updated.emit(10)
-            total_containers = len(self.monitoring_containers)
-            progress_step = 80 // total_containers
-            current_progress = 10
-            
-            for container_name, config in self.monitoring_containers.items():
-                full_container_name = f"{self.container_prefix}-{container_name}"
-                
-                self.progress_updated.emit(current_progress)
-                self.status_updated.emit(f"Checking if {container_name} container exists...")
-                
-                # Stop existing container if running
-                if DockerUtils.container_exists(full_container_name):
-                    self.status_updated.emit(f"Stopping existing {container_name} container...")
-                    DockerUtils.stop_container(full_container_name)
-                
-                # Pull image if not exists
-                if not DockerUtils.image_exists(config['image']):
-                    self.progress_updated.emit(current_progress)
-                    self.status_updated.emit(f"Pulling image {config['image']}...")
-                    DockerUtils.pull_image(config['image'])
-                
-                # Build and run container
-                builder = DockerContainerBuilder(image=config['image'], container_name=full_container_name)
-                builder.set_network(self.network_name)
-                
-                # Add ports
-                for port in config.get('ports', []):
-                    builder.add_port(port)
-                
-                # Add volumes
-                for volume in config.get('volumes', []):
-                    builder.add_volume(volume)
-                
-                # Add environment variables
-                for env in config.get('env', []):
-                    builder.add_env(env)
-                
-                # Handle privileged mode
-                if config.get('privileged', False):
-                    builder.add_extra_arg('--privileged')
-                
-                # Handle PID mode
-                if 'pid_mode' in config and config['pid_mode']:
-                    builder.add_extra_arg(f'--pid={config["pid_mode"]}')
-                
-                # Handle extra args and command args
-                if container_name == 'node-exporter':
-                    # For node-exporter, pass --path.rootfs=/host as a command arg
-                    for arg in config.get('extra_args', []):
-                        builder.add_command_arg(arg)
-                else:
-                    # For other containers, add as extra args only if they exist
-                    for arg in config.get('extra_args', []):
-                        builder.add_extra_arg(arg)
-                
-                self.status_updated.emit(f"Deploying {container_name}...")
-                builder.run()
-                current_progress += progress_step
-            
-            self.status_updated.emit("Waiting for containers to be ready...")
-            self.progress_updated.emit(90)
-            time.sleep(5)  # Give containers time to start up
-            
-            # Verify containers are running
-            failed_containers = []
-            for container_name in self.monitoring_containers:
-                full_container_name = f"{self.container_prefix}-{container_name}"
-                if not DockerUtils.is_container_running(full_container_name):
-                    failed_containers.append(container_name)
-            
-            if failed_containers:
-                warning_print(f"Some containers failed to start: {failed_containers}")
-            
-            self.progress_updated.emit(100)
-            self.operation_finished.emit(True, 
-                f"Monitoring stack deployed successfully!\n\n"
-                f"📊 Access URLs:\n"
-                f"• Grafana: http://localhost:3000 (admin/admin)\n"
-                f"• Prometheus: http://localhost:9090\n"
-                f"• Alertmanager: http://localhost:9093\n"
-                f"• cAdvisor: http://localhost:8080\n"
-                f"• Node Exporter: http://localhost:9100/metrics\n"
-                f"• Blackbox Exporter: http://localhost:9115\n\n"
-                f"🔍 Features enabled:\n"
-                f"• Network connectivity monitoring\n"
-                f"• HTTP/HTTPS endpoint probing\n"
-                f"• ICMP ping monitoring\n"
-                f"• TCP port connectivity checks\n"
-                f"• System and container metrics\n"
-                f"• Alert management\n\n"
-                f"⚠️ Failed containers: {', '.join(failed_containers) if failed_containers else 'None'}")
-                
-        except Exception as e:
-            error_print(f"Deployment failed: {e}")
-            self.operation_finished.emit(False, f"Deployment failed: {str(e)}")
-
-    def _stop_monitoring(self):
-        try:
-            total_containers = len(self.monitoring_containers)
-            current_progress = 10
-            
-            for container_name in self.monitoring_containers:
-                full_container_name = f"{self.container_prefix}-{container_name}"
-                progress_step = 80 // total_containers
-                current_progress += progress_step
-                
-                self.status_updated.emit(f"Stopping {container_name}...")
-                self.progress_updated.emit(current_progress)
-                
-                if DockerUtils.container_exists(full_container_name):
-                    DockerUtils.stop_container(full_container_name)
-                    
-            self.progress_updated.emit(100)
-            self.operation_finished.emit(True, "All monitoring containers stopped successfully.")
-            
-        except Exception as e:
-            error_print(f"Failed to stop monitoring: {e}")
-            self.operation_finished.emit(False, str(e))
-
-    def _cleanup_monitoring(self):
-        try:
-            self.status_updated.emit("Cleaning up monitoring containers...")
-            
-            for container_name in self.monitoring_containers:
-                full_container_name = f"{self.container_prefix}-{container_name}"
-                
-                self.status_updated.emit(f"Removing {container_name}...")
-                
-                if DockerUtils.container_exists(full_container_name):
-                    DockerUtils.stop_container(full_container_name)
-                    
-            self.progress_updated.emit(100)
-            self.operation_finished.emit(True, "Monitoring stack completely removed")
-            
-        except Exception as e:
-            error_print(f"Cleanup failed: {e}")
-            self.operation_finished.emit(False, f"Cleanup failed: {str(e)}")
-
-class MonitoringManager:
-    """Manager for monitoring deployment operations."""
-    
+class AutomationManager:
     def __init__(self, main_window):
         self.main_window = main_window
-        self.current_worker = None
         self.progress_dialog = None
         
-    def deployMonitoring(self):
-        container_prefix = "netflux5g"
-        if not self._check_docker_available():
-            return
-            
-        if hasattr(self.main_window, 'docker_network_manager'):
-            if not self.main_window.docker_network_manager.prompt_create_netflux5g_network():
-                self.main_window.status_manager.showCanvasStatus("Monitoring deployment cancelled - netflux5g network required")
-                return
-        else:
-            warning_print("Docker network manager not available, proceeding without network check")
-            
-        running_containers = self._get_running_monitoring_containers(container_prefix)
-        if running_containers:
-            reply = QMessageBox.question(
-                self.main_window,
-                "Monitoring Already Running",
-                f"Some monitoring containers are already running:\n{', '.join(running_containers)}\n\n"
-                f"Do you want to restart the monitoring stack?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if reply == QMessageBox.No:
-                return
-                
-        reply = QMessageBox.question(
+    def promptControllerChoice(self):
+        """Prompt the user to choose between Ryu and ONOS controller."""
+        options = ["Ryu Controller", "ONOS Controller"]
+        choice, ok = QInputDialog.getItem(
             self.main_window,
-            "Deploy Enhanced Monitoring Stack",
-            f"This will deploy the comprehensive monitoring stack with blackbox monitoring:\n\n"
-            f"📊 Services to be deployed:\n"
-            f"• Prometheus (metrics collection) - port 9090\n"
-            f"• Grafana (visualization) - port 3000\n" 
-            f"• Node Exporter (system metrics) - port 9100\n"
-            f"• cAdvisor (container metrics) - port 8080\n"
-            f"• Blackbox Exporter (network probing) - port 9115\n"
-            f"• Alertmanager (alert handling) - port 9093\n\n"
-            f"🔍 Blackbox monitoring capabilities:\n"
-            f"• HTTP/HTTPS endpoint monitoring\n"
-            f"• ICMP ping tests\n"
-            f"• TCP port connectivity checks\n"
-            f"• DNS resolution monitoring\n"
-            f"• SSL certificate expiry tracking\n\n"
-            f"🎯 Monitored targets include:\n"
-            f"• All 5G Core Network Functions (AMF, SMF, UPF, NRF, etc.)\n"
-            f"• gNodeBs and UE containers\n"
-            f"• Infrastructure services (MongoDB, WebUI, ONOS)\n"
-            f"• External connectivity (8.8.8.8)\n\n"
-            f"🌐 Access URLs after deployment:\n"
-            f"• Grafana: http://localhost:3000 (admin/admin)\n"
-            f"• Prometheus: http://localhost:9090\n"
-            f"• Alertmanager: http://localhost:9093\n\n"
-            f"Do you want to continue?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes
+            "Select SDN Controller",
+            "Choose which controller to deploy:",
+            options,
+            0,
+            False
         )
-        if reply == QMessageBox.No:
+        if ok:
+            if "ONOS" in choice:
+                return "onos"
+            else:
+                return "ryu"
+        return None
+
+    def runAllComponents(self):
+        """Run All - Deploy and start all components including controller, database, monitoring, and topology, with stepwise waiting."""
+        from PyQt5.QtCore import QEventLoop
+        debug_print("DEBUG: RunAll triggered - comprehensive deployment")
+        # Prompt for controller type
+        controller_type = self.promptControllerChoice()
+        if not controller_type:
+            debug_print("DEBUG: User cancelled controller selection.")
             return
-            
-        self._start_operation('deploy', container_prefix, "netflux5g")
-    
-    def stopMonitoring(self):
-        debug_print("Stop Monitoring triggered")
-        container_prefix = "netflux5g"
-        if not self._check_docker_available():
-            return
-            
-        existing_containers = self._get_existing_monitoring_containers(container_prefix)
-        if not existing_containers:
+        self.main_window.selected_controller_type = controller_type
+        # Disable Run All button immediately
+        if hasattr(self.main_window, 'actionRun_All'):
+            self.main_window.actionRun_All.setEnabled(False)
+        if hasattr(self.main_window, 'actionRunAll'):
+            self.main_window.actionRunAll.setEnabled(False)
+
+        def wait_for_worker(manager, worker_attr='current_worker'):
+            """Wait for a manager's worker to finish using QEventLoop."""
+            if hasattr(manager, worker_attr):
+                worker = getattr(manager, worker_attr)
+                if worker and worker.isRunning():
+                    loop = QEventLoop()
+                    def on_finished(*_):
+                        loop.quit()
+                    worker.operation_finished.connect(on_finished)
+                    loop.exec_()
+
+        try:
+            self.main_window.status_manager.showCanvasStatus("Starting comprehensive deployment...")
+            # Step 1: Ensure Docker network exists
+            debug_print("DEBUG: Step 1 - Creating Docker network")
+            self.main_window.status_manager.showCanvasStatus("Creating Docker network...")
+            if hasattr(self.main_window, 'docker_network_manager'):
+                self.main_window.docker_network_manager.create_netflux5g_network_if_needed()
+                # No worker, so no wait needed
+
+            # Step 2: Deploy Controller (Ryu or ONOS)
+            debug_print(f"DEBUG: Step 2 - Deploying {controller_type.upper()} controller")
+            self.main_window.status_manager.showCanvasStatus(f"Deploying {controller_type.upper()} controller...")
+            if hasattr(self.main_window, 'controller_manager'):
+                if controller_type == 'onos':
+                    self.main_window.controller_manager.deployOnosController()
+                else:
+                    self.main_window.controller_manager.deployController()
+                wait_for_worker(self.main_window.controller_manager, 'deployment_worker')
+
+            # Step 3: Deploy Database (MongoDB)
+            debug_print("DEBUG: Step 3 - Deploying MongoDB database")
+            self.main_window.status_manager.showCanvasStatus("Deploying MongoDB database...")
+            if hasattr(self.main_window, 'database_manager'):
+                self.main_window.database_manager.deployDatabase()
+                wait_for_worker(self.main_window.database_manager)
+
+            # Step 4: Deploy WebUI (User Manager)
+            debug_print("DEBUG: Step 4 - Deploying WebUI User Manager")
+            self.main_window.status_manager.showCanvasStatus("Deploying WebUI User Manager...")
+            if hasattr(self.main_window, 'database_manager'):
+                self.main_window.database_manager.deployWebUI()
+                wait_for_worker(self.main_window.database_manager)
+
+            # Step 5: Deploy Monitoring Stack
+            debug_print("DEBUG: Step 5 - Deploying Monitoring stack")
+            self.main_window.status_manager.showCanvasStatus("Deploying Monitoring stack...")
+            if hasattr(self.main_window, 'monitoring_manager'):
+                self.main_window.monitoring_manager.deployMonitoring()
+                wait_for_worker(self.main_window.monitoring_manager)
+
+            # Step 6: Deploy Packet Analyzer (Webshark)
+            debug_print("DEBUG: Step 6 - Deploying Packet Analyzer")
+            self.main_window.status_manager.showCanvasStatus("Deploying Packet Analyzer...")
+            if hasattr(self.main_window, 'packet_analyzer_manager'):
+                self.main_window.packet_analyzer_manager.deployPacketAnalyzer()
+                wait_for_worker(self.main_window.packet_analyzer_manager)
+
+            # Step 7: Run Topology
+            debug_print("DEBUG: Step 7 - Running topology")
+            self.main_window.status_manager.showCanvasStatus("Starting topology...")
+            if hasattr(self.main_window, 'automation_runner'):
+                self.main_window.automation_runner.run_topology_only()
+
+            # Update UI state after successful deployment
+            if hasattr(self.main_window, 'actionStop_All'):
+                self.main_window.actionStop_All.setEnabled(True)
+            if hasattr(self.main_window, 'actionStopAll'):
+                self.main_window.actionStopAll.setEnabled(True)
+            if hasattr(self.main_window, 'actionStop'):
+                self.main_window.actionStop.setEnabled(True)
+
+            self.main_window.status_manager.showCanvasStatus("All services deployed successfully!")
+
             QMessageBox.information(
                 self.main_window,
-                "No Monitoring Containers",
-                f"No monitoring containers found with prefix '{container_prefix}'."
+                "Services Started",
+                "All NetFlux5G services have been started successfully.\n\nServices deployed:\n" +
+                f"- {controller_type.upper()} Controller\n" +
+                "- MongoDB Database\n" +
+                "- WebUI User Manager\n" +
+                "- Monitoring Stack (with Blackbox Monitoring)\n" +
+                "- Packet Analyzer\n" +
+                "- Network Topology\n\n" +
+                "Access points:\n" +
+                "- Grafana: http://localhost:3000 (admin/admin)\n" +
+                "- Prometheus: http://localhost:9090\n" +
+                "- Blackbox Exporter: http://localhost:9115\n" +
+                "- Alertmanager: http://localhost:9093\n\n" +
+                "You can now use the topology."
             )
-            return
+                
+        except Exception as e:
+            error_print(f"ERROR: Failed to start automation: {e}")
             
+            # Re-enable Run All button on error
+            if hasattr(self.main_window, 'actionRun_All'):
+                self.main_window.actionRun_All.setEnabled(True)
+            if hasattr(self.main_window, 'actionRunAll'):
+                self.main_window.actionRunAll.setEnabled(True)
+                
+            QMessageBox.critical(
+                self.main_window,
+                "Deployment Error",
+                f"Failed to start deployment:\n{str(e)}"
+            )
+    
+    def stopAllComponents(self):
+        """Stop All - Stop all running services including controller, database, monitoring, and clean mininet"""
+        debug_print("DEBUG: StopAll triggered - comprehensive cleanup")
+        
+        # Use the selected controller type for cleanup
+        controller_type = getattr(self.main_window, 'selected_controller_type', 'ryu')
+        
         reply = QMessageBox.question(
             self.main_window,
-            "Stop Monitoring Stack",
-            f"This will stop all monitoring containers:\n\n"
-            f"📊 Found containers: {', '.join(existing_containers)}\n\n"
-            f"The containers will be stopped but no data will be lost.\n"
-            f"You can restart them later with 'Deploy Monitoring'.\n\n"
-            f"Are you sure you want to continue?",
+            "Stop All Services",
+            f"Are you sure you want to stop all running services?\n\nThis will:\n- Stop MongoDB Database\n- Stop WebUI (User Manager)\n- Stop Enhanced Monitoring Stack\n- Stop {controller_type.upper()} Controller\n- Clean up Mininet with 'sudo mn -c'\n- Terminate all processes",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
-        if reply == QMessageBox.No:
-            return
-            
-        self._start_operation('stop', container_prefix, None)
+        
+        if reply == QMessageBox.Yes:
+            self._performComprehensiveStopAll(controller_type=controller_type)
 
-    def _check_docker_available(self):
-        return DockerUtils.check_docker_available(self.main_window, show_error=True)
-    
-    def _get_running_monitoring_containers(self, container_prefix):
-        running_containers = []
-        monitoring_types = ['prometheus', 'grafana', 'node-exporter', 'cadvisor', 'blackbox-exporter', 'alertmanager']
-        for monitoring_type in monitoring_types:
-            container_name = f"{container_prefix}-{monitoring_type}"
-            if DockerUtils.is_container_running(container_name):
-                running_containers.append(monitoring_type)
-        return running_containers
+    def _performComprehensiveStopAll(self, controller_type='ryu'):
+        """Perform cleanup for all services, using the selected controller type, with stepwise waiting."""
+        from PyQt5.QtCore import QEventLoop
+        debug_print("DEBUG: Performing comprehensive stop of all services")
 
-    def _get_existing_monitoring_containers(self, container_prefix):
-        existing_containers = []
-        monitoring_types = ['prometheus', 'grafana', 'node-exporter', 'cadvisor', 'blackbox-exporter', 'alertmanager']
-        for monitoring_type in monitoring_types:
-            container_name = f"{container_prefix}-{monitoring_type}"
-            if DockerUtils.container_exists(container_name):
-                existing_containers.append(monitoring_type)
-        return existing_containers
-    
-    def _start_operation(self, operation, container_prefix, network_name):
-        """Start a MonitoringDeploymentWorker thread for the given operation, with progress dialog."""
-        if self.current_worker is not None and self.current_worker.isRunning():
-            warning_print("A monitoring operation is already in progress.")
-            return
-            
-        # Create progress dialog
+        # Show progress dialog for stopping services
         self.progress_dialog = QProgressDialog(
-            "Monitoring operation in progress...",
+            "Stopping all NetFlux5G services...",
             "Cancel",
             0,
             100,
             self.main_window
         )
-        self.progress_dialog.setWindowTitle("Enhanced Monitoring Operation")
+        self.progress_dialog.setWindowTitle("NetFlux5G Stop All Progress")
         self.progress_dialog.setModal(True)
         self.progress_dialog.show()
-        
-        self.current_worker = MonitoringDeploymentWorker(operation, container_prefix, network_name)
-        self.current_worker.progress_updated.connect(self._on_progress_updated)
-        self.current_worker.status_updated.connect(self._on_status_updated)
-        self.current_worker.operation_finished.connect(self._on_operation_finished)
-        self.progress_dialog.canceled.connect(self._on_operation_canceled)
-        
-        self.current_worker.start()
+        progress = 0
+        self.progress_dialog.setValue(progress)
 
-    def _on_operation_canceled(self):
-        if self.current_worker:
-            self.current_worker.terminate()
-            self.current_worker.wait(3000)
-        if self.progress_dialog:
+        def wait_for_worker(manager, worker_attr='current_worker'):
+            """Wait for a manager's worker to finish using QEventLoop."""
+            if hasattr(manager, worker_attr):
+                worker = getattr(manager, worker_attr)
+                if worker and worker.isRunning():
+                    loop = QEventLoop()
+                    def on_finished(*_):
+                        loop.quit()
+                    worker.operation_finished.connect(on_finished)
+                    loop.exec_()
+
+        try:
+            # 1. Stop Mininet first (if running)
+            if self.main_window.automation_runner.is_deployment_running():
+                self.main_window.status_manager.showCanvasStatus("Stopping Mininet and cleaning up...")
+                self.progress_dialog.setLabelText("Stopping Mininet and cleaning up...")
+                self.progress_dialog.setValue(10)
+                self.main_window.automation_runner.stop_topology()
+                wait_for_worker(self.main_window.automation_runner, 'current_worker')
+            else:
+                self.main_window.status_manager.showCanvasStatus("Cleaning up Mininet...")
+                self.progress_dialog.setLabelText("Cleaning up Mininet...")
+                self.progress_dialog.setValue(20)
+                self._cleanupMininet()
+
+            # 2. Stop all NetFlux5G Docker containers comprehensively
+            self.main_window.status_manager.showCanvasStatus("Stopping all NetFlux5G containers...")
+            self.progress_dialog.setLabelText("Stopping all NetFlux5G containers...")
+            self.progress_dialog.setValue(60)
+            self._stop_all_netflux5g_containers()
+
+            # Reset all UI states after stopping
+            self.progress_dialog.setValue(90)
+            self._resetAllUIStates()
+            self.main_window.status_manager.showCanvasStatus("All services stopped successfully")
+            self.progress_dialog.setLabelText("All services stopped successfully!")
+            self.progress_dialog.setValue(100)
+            QTimer.singleShot(1000, self.progress_dialog.close)
+
+        except Exception as e:
+            debug_print(f"ERROR: Error during comprehensive stop: {e}")
+            QMessageBox.critical(
+                self.main_window,
+                "Stop All Error",
+                f"An error occurred while stopping services:\n{str(e)}\n\nSome services may still be running."
+            )
             self.progress_dialog.close()
-            self.progress_dialog = None
 
-    def _on_progress_updated(self, value):
-        if self.progress_dialog:
-            self.progress_dialog.setValue(value)
-
-    def _on_status_updated(self, status):
-        if self.progress_dialog:
-            self.progress_dialog.setLabelText(status)
-
-    def _on_operation_finished(self, success, message):
-        if self.progress_dialog:
-            self.progress_dialog.close()
-            self.progress_dialog = None
+    def _cleanupMininet(self):
+        """Clean up Mininet using sudo mn -c"""
+        try:
+            debug_print("DEBUG: Executing 'sudo mn -c' for Mininet cleanup")
+            result = subprocess.run(
+                ["sudo", "mn", "-c"], 
+                capture_output=True, 
+                text=True, 
+                timeout=30
+            )
             
-        if success:
-            QMessageBox.information(self.main_window, "Monitoring Operation Complete", message)
+            if result.returncode == 0:
+                debug_print("DEBUG: Mininet cleanup successful")
+            else:
+                debug_print(f"WARNING: Mininet cleanup warning: {result.stderr}")
+                
+        except subprocess.TimeoutExpired:
+            debug_print("ERROR: Mininet cleanup timed out")
+        except subprocess.CalledProcessError as e:
+            debug_print(f"ERROR: Mininet cleanup failed: {e}")
+        except Exception as e:
+            debug_print(f"ERROR: Unexpected error during Mininet cleanup: {e}")
+
+    def _resetAllUIStates(self):
+        """Reset all UI states after stopping services"""
+        # Reset Run All / Stop All buttons
+        if hasattr(self.main_window, 'actionRun_All'):
+            self.main_window.actionRun_All.setEnabled(True)
+        if hasattr(self.main_window, 'actionStop_All'):
+            self.main_window.actionStop_All.setEnabled(False)
+        if hasattr(self.main_window, 'actionRunAll'):
+            self.main_window.actionRunAll.setEnabled(True)
+        if hasattr(self.main_window, 'actionStopAll'):
+            self.main_window.actionStopAll.setEnabled(False)
+        if hasattr(self.main_window, 'actionRun'):
+            self.main_window.actionRun.setEnabled(True)
+        if hasattr(self.main_window, 'actionStop'):
+            self.main_window.actionStop.setEnabled(False)
+
+    def stopTopology(self):
+        """Stop and clean up the current topology - Simple cleanup with mn -c"""
+        debug_print("DEBUG: Stop topology triggered")
+        
+        # Show confirmation dialog
+        reply = QMessageBox.question(
+            self.main_window,
+            "Clean Topology",
+            "Are you sure you want to clean up the current topology?\n\nThis will:\n- Execute 'sudo mn -c' to clean Mininet\n- Stop any running topology processes",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            # Delegate to automation runner's stop_topology
+            self.main_window.automation_runner.stop_topology()
+        # Update UI state
+        if hasattr(self.main_window, 'actionRun_All'):
+            self.main_window.actionRun_All.setEnabled(True)
+        if hasattr(self.main_window, 'actionRunAll'):
+            self.main_window.actionRunAll.setEnabled(True)
+        if hasattr(self.main_window, 'actionRun'):
+            self.main_window.actionRun.setEnabled(True)
+        if hasattr(self.main_window, 'actionStop_All'):
+            self.main_window.actionStop_All.setEnabled(False)
+        if hasattr(self.main_window, 'actionStopAll'):
+            self.main_window.actionStopAll.setEnabled(False)
+        if hasattr(self.main_window, 'actionStop'):
+            self.main_window.actionStop.setEnabled(False)
+
+    def runTopology(self):
+        """Run the topology (actionRun) with proper UI state management."""
+        debug_print("DEBUG: Run topology triggered")
+        
+        # Check if already running
+        if self.main_window.automation_runner.is_deployment_running():
+            reply = QMessageBox.question(
+                self.main_window,
+                "Already Running",
+                "Deployment is already running. Do you want to stop it first?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                self.stopTopology()
+                QTimer.singleShot(2000, self.runTopology)
+            return
+        
+        # Start the topology
+        self.main_window.automation_runner.run_topology_only()
+        
+        # Update UI state
+        if hasattr(self.main_window, 'actionRun_All'):
+            self.main_window.actionRun_All.setEnabled(False)
+        if hasattr(self.main_window, 'actionRunAll'):
+            self.main_window.actionRunAll.setEnabled(False)
+        if hasattr(self.main_window, 'actionRun'):
+            self.main_window.actionRun.setEnabled(False)
+        if hasattr(self.main_window, 'actionStop_All'):
+            self.main_window.actionStop_All.setEnabled(True)
+        if hasattr(self.main_window, 'actionStopAll'):
+            self.main_window.actionStopAll.setEnabled(True)
+        if hasattr(self.main_window, 'actionStop'):
+            self.main_window.actionStop.setEnabled(True)
+    
+    def _stop_all_netflux5g_containers(self):
+        """Stop all NetFlux5G containers systematically, including the new monitoring containers."""
+        try:
+            debug_print("DEBUG: Stopping all NetFlux5G containers")
+            
+            # List of all possible NetFlux5G container names (including new monitoring containers)
+            container_names = [
+                "netflux5g-ryu-controller",
+                "netflux5g-onos-controller", 
+                "netflux5g-mongodb",
+                "netflux5g-webui",
+                "netflux5g-cadvisor",
+                "netflux5g-grafana",
+                "netflux5g-prometheus",
+                "netflux5g-node-exporter",
+                "netflux5g-blackbox-exporter",  # New blackbox exporter
+                "netflux5g-alertmanager",       # New alertmanager
+                "netflux5g-webshark"
+            ]
+            
+            # Use DockerUtils to stop containers
+            from utils.docker_utils import DockerUtils
+            
+            for container_name in container_names:
+                if DockerUtils.is_container_running(container_name):
+                    self.main_window.status_manager.showCanvasStatus(f"Stopping container: {container_name}")
+                    debug_print(f"DEBUG: Stopping container: {container_name}")
+                    DockerUtils.stop_container(container_name)
+                    
+            debug_print("DEBUG: All NetFlux5G containers stopped")
+            
+        except Exception as e:
+            error_print(f"ERROR: Failed to stop all containers: {e}")
+
+    # Individual service management methods (delegate to specific managers)
+    def exportToMininet(self):
+        """Export topology to Mininet script."""
+        if hasattr(self.main_window, 'mininet_exporter'):
+            self.main_window.mininet_exporter.export_to_mininet()
         else:
-            QMessageBox.critical(self.main_window, "Monitoring Operation Failed", message)
+            from export.mininet_export import MininetExporter
+            exporter = MininetExporter(self.main_window)
+            exporter.export_to_mininet()
+
+    def createDockerNetwork(self):
+        """Create Docker network."""
+        if hasattr(self.main_window, 'docker_network_manager'):
+            self.main_window.docker_network_manager.create_docker_network()
+
+    def deleteDockerNetwork(self):
+        """Delete Docker network."""
+        if hasattr(self.main_window, 'docker_network_manager'):
+            self.main_window.docker_network_manager.delete_docker_network()
+
+    def deployDatabase(self):
+        """Deploy database service."""
+        if hasattr(self.main_window, 'database_manager'):
+            self.main_window.database_manager.deployDatabase()
+
+    def stopDatabase(self):
+        """Stop database service."""
+        if hasattr(self.main_window, 'database_manager'):
+            self.main_window.database_manager.stopDatabase()
+
+    def getDatabaseStatus(self):
+        """Get database status."""
+        if hasattr(self.main_window, 'database_manager'):
+            return self.main_window.database_manager.getContainerStatus()
+        return False
+
+    def deployWebUI(self):
+        """Deploy WebUI service."""
+        if hasattr(self.main_window, 'database_manager'):
+            self.main_window.database_manager.deployWebUI()
+
+    def stopWebUI(self):
+        """Stop WebUI service."""
+        if hasattr(self.main_window, 'database_manager'):
+            self.main_window.database_manager.stopWebUI()
+
+    def getWebUIStatus(self):
+        """Get WebUI status."""
+        if hasattr(self.main_window, 'database_manager'):
+            return self.main_window.database_manager.getWebUIStatus()
+        return False
+
+    def deployMonitoring(self):
+        """Deploy enhanced monitoring service with blackbox capabilities."""
+        if hasattr(self.main_window, 'monitoring_manager'):
+            self.main_window.monitoring_manager.deployMonitoring()
+
+    def stopMonitoring(self):
+        """Stop monitoring service."""
+        if hasattr(self.main_window, 'monitoring_manager'):
+            self.main_window.monitoring_manager.stopMonitoring()
+
+    def getMonitoringStatus(self):
+        """Get monitoring status."""
+        if hasattr(self.main_window, 'monitoring_manager'):
+            if hasattr(self.main_window.monitoring_manager, 'is_monitoring_running'):
+                return self.main_window.monitoring_manager.is_monitoring_running()
+        return False
+
+    def deployPacketAnalyzer(self):
+        """Deploy packet analyzer service."""
+        if hasattr(self.main_window, 'packet_analyzer_manager'):
+            self.main_window.packet_analyzer_manager.deployPacketAnalyzer()
+
+    def stopPacketAnalyzer(self):
+        """Stop packet analyzer service."""
+        if hasattr(self.main_window, 'packet_analyzer_manager'):
+            self.main_window.packet_analyzer_manager.stopPacketAnalyzer()
+
+    def getPacketAnalyzerStatus(self):
+        """Get packet analyzer status."""
+        if hasattr(self.main_window, 'packet_analyzer_manager'):
+            if hasattr(self.main_window.packet_analyzer_manager, 'is_packet_analyzer_running'):
+                return self.main_window.packet_analyzer_manager.is_packet_analyzer_running()
+        return False
+
+    def deployController(self):
+        """Deploy controller service."""
+        if hasattr(self.main_window, 'controller_manager'):
+            self.main_window.controller_manager.deployController()
+
+    def stopController(self):
+        """Stop controller service."""
+        if hasattr(self.main_window, 'controller_manager'):
+            self.main_window.controller_manager.stopController()
+
+    def getControllerStatus(self):
+        """Get controller status."""
+        if hasattr(self.main_window, 'controller_manager'):
+            return self.main_window.controller_manager.getControllerStatus()
+        return False
+
+    def deployOnosController(self):
+        """Deploy ONOS controller service."""
+        if hasattr(self.main_window, 'controller_manager'):
+            self.main_window.controller_manager.deployOnosController()
+
+    def stopOnosController(self):
+        """Stop ONOS controller service."""
+        if hasattr(self.main_window, 'controller_manager'):
+            self.main_window.controller_manager.stopOnosController()
+
+    def getOnosControllerStatus(self):
+        """Get ONOS controller status."""
+        if hasattr(self.main_window, 'controller_manager'):
+            return self.main_window.controller_manager.getOnosControllerStatus()
+        return False
