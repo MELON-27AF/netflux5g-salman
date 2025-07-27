@@ -1,0 +1,1076 @@
+{
+  "version": "1.1",
+  "type": "NetFlux5G_Topology",
+  "metadata": {
+    "created_with": "NetFlux5G Editor",
+    "created_date": "Rab Jul 16 06:39:55 2025",
+    "saved_date": "Rab Jul 16 06:39:55 2025",
+    "canvas_size": {
+      "width": 1292,
+      "height": 801
+    },
+    "component_counts": {},
+    "editor_version": "2.0"
+  },
+  "nodes": [
+    {
+      "name": "UE #1",
+      "type": "UE",
+      "x": -919.4099928124999,
+      "y": -521.0824078124998,
+      "properties": {
+        "name": "UE #1",
+        "type": "UE",
+        "x": -919.4099928124999,
+        "y": -521.0824078124998,
+        "UE_GNBHostName": "GNB__1",
+        "UE_APN": "internet",
+        "UE_MSISDN": "0000000001",
+        "UE_MCC": "999",
+        "UE_MNC": "70",
+        "UE_KEY": "465B5CE8B199B49FAA5F0A2EE238A6BC",
+        "UE_OPType": "OPC",
+        "UE_OP": "E8ED289DEBA952E4283B54E88E6183CA",
+        "UE_SST": "1",
+        "UE_SD": "0xffffff",
+        "qt_spinbox_lineedit": "1",
+        "UE_GNB_IP": "",
+        "UE_TunnelInterface": "uesimtun0",
+        "UE_RadioInterface": "UE__1-wlan0",
+        "UE_IMEI": "356938035643803",
+        "UE_IMEISV": "4370816125816151",
+        "UE_AssociationMode": "auto",
+        "UE_SessionType": "IPv4",
+        "UE_Mobility": false,
+        "UE_Power": 20,
+        "UE_Range": 116,
+        "UE_PDUSessions": 1,
+        "ue_gnb_hostname": "GNB__1",
+        "ue_apn": "internet",
+        "ue_msisdn": "0000000001",
+        "ue_mcc": "999",
+        "ue_mnc": "70",
+        "ue_key": "465B5CE8B199B49FAA5F0A2EE238A6BC",
+        "ue_op_type": "OPC",
+        "ue_op": "E8ED289DEBA952E4283B54E88E6183CA",
+        "ue_sst": "1",
+        "ue_sd": "0xffffff",
+        "ue_imei": "356938035643803",
+        "ue_imeisv": "4370816125816151",
+        "wireless_txpower": 20,
+        "wireless_range": 116,
+        "wireless_association": "auto",
+        "wireless_mobility": false,
+        "network_gnb_ip": "",
+        "network_tunnel_iface": "uesimtun0",
+        "network_radio_iface": "UE__1-wlan0",
+        "network_pdu_sessions": "1",
+        "network_session_type": "IPv4"
+      },
+      "created_date": "Rab Jul 16 06:39:55 2025",
+      "component_id": 131457036129568
+    },
+    {
+      "name": "UE #2",
+      "type": "UE",
+      "x": -1024.6378196875003,
+      "y": 200.34138031250018,
+      "properties": {
+        "name": "UE #2",
+        "type": "UE",
+        "x": -1024.6378196875003,
+        "y": 200.34138031250018,
+        "UE_GNBHostName": "GNB__1",
+        "UE_APN": "internet",
+        "UE_MSISDN": "0000000002",
+        "UE_MCC": "999",
+        "UE_MNC": "70",
+        "UE_KEY": "465B5CE8B199B49FAA5F0A2EE238A6BC",
+        "UE_OPType": "OPC",
+        "UE_OP": "E8ED289DEBA952E4283B54E88E6183CA",
+        "UE_SST": "1",
+        "UE_SD": "0xffffff",
+        "qt_spinbox_lineedit": "1",
+        "UE_GNB_IP": "",
+        "UE_TunnelInterface": "uesimtun0",
+        "UE_RadioInterface": "UE__2-wlan0",
+        "UE_IMEI": "356938035643803",
+        "UE_IMEISV": "4370816125816151",
+        "UE_AssociationMode": "auto",
+        "UE_SessionType": "IPv4",
+        "UE_Mobility": false,
+        "UE_Power": 20,
+        "UE_Range": 116,
+        "UE_PDUSessions": 1,
+        "ue_gnb_hostname": "GNB__1",
+        "ue_apn": "internet",
+        "ue_msisdn": "0000000002",
+        "ue_mcc": "999",
+        "ue_mnc": "70",
+        "ue_key": "465B5CE8B199B49FAA5F0A2EE238A6BC",
+        "ue_op_type": "OPC",
+        "ue_op": "E8ED289DEBA952E4283B54E88E6183CA",
+        "ue_sst": "1",
+        "ue_sd": "0xffffff",
+        "ue_imei": "356938035643803",
+        "ue_imeisv": "4370816125816151",
+        "wireless_txpower": 20,
+        "wireless_range": 116,
+        "wireless_association": "auto",
+        "wireless_mobility": false,
+        "network_gnb_ip": "",
+        "network_tunnel_iface": "uesimtun0",
+        "network_radio_iface": "UE__2-wlan0",
+        "network_pdu_sessions": "1",
+        "network_session_type": "IPv4"
+      },
+      "created_date": "Rab Jul 16 06:39:55 2025",
+      "component_id": 131457036129424
+    },
+    {
+      "name": "UE #3",
+      "type": "UE",
+      "x": -453.06712875000005,
+      "y": -133.35136062500004,
+      "properties": {
+        "name": "UE #3",
+        "type": "UE",
+        "x": -453.06712875000005,
+        "y": -133.35136062500004,
+        "UE_GNBHostName": "GNB__1",
+        "UE_APN": "internet2",
+        "UE_MSISDN": "0000000011",
+        "UE_MCC": "999",
+        "UE_MNC": "70",
+        "UE_KEY": "465B5CE8B199B49FAA5F0A2EE238A6BC",
+        "UE_OPType": "OPC",
+        "UE_OP": "E8ED289DEBA952E4283B54E88E6183CA",
+        "UE_SST": "1",
+        "UE_SD": "0xffffff",
+        "UE_GNB_IP": "",
+        "UE_TunnelInterface": "uesimtun0",
+        "UE_RadioInterface": "UE__3-wlan0",
+        "qt_spinbox_lineedit": "1",
+        "UE_IMEI": "356938035643803",
+        "UE_IMEISV": "4370816125816151",
+        "UE_SessionType": "IPv4",
+        "UE_AssociationMode": "auto",
+        "UE_Mobility": false,
+        "UE_PDUSessions": 1,
+        "UE_Power": 20,
+        "UE_Range": 116,
+        "ue_gnb_hostname": "GNB__1",
+        "ue_apn": "internet2",
+        "ue_msisdn": "0000000011",
+        "ue_mcc": "999",
+        "ue_mnc": "70",
+        "ue_key": "465B5CE8B199B49FAA5F0A2EE238A6BC",
+        "ue_op_type": "OPC",
+        "ue_op": "E8ED289DEBA952E4283B54E88E6183CA",
+        "ue_sst": "1",
+        "ue_sd": "0xffffff",
+        "ue_imei": "356938035643803",
+        "ue_imeisv": "4370816125816151",
+        "wireless_txpower": 20,
+        "wireless_range": 116,
+        "wireless_association": "auto",
+        "wireless_mobility": false,
+        "network_gnb_ip": "",
+        "network_tunnel_iface": "uesimtun0",
+        "network_radio_iface": "UE__3-wlan0",
+        "network_pdu_sessions": "1",
+        "network_session_type": "IPv4"
+      },
+      "created_date": "Rab Jul 16 06:39:55 2025",
+      "component_id": 131457036129280
+    },
+    {
+      "name": "VGcore #1",
+      "type": "VGcore",
+      "x": -818.3356490625002,
+      "y": -803.8734840624999,
+      "properties": {
+        "name": "VGcore #1",
+        "type": "VGcore",
+        "x": -818.3356490625002,
+        "y": -803.8734840624999,
+        "UPF_configs": [
+          {
+            "name": "upf1",
+            "config_display": "✓ upf1.yaml",
+            "config_content": {
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/upf.log"
+                }
+              },
+              "global": null,
+              "upf": {
+                "pfcp": {
+                  "server": [
+                    {
+                      "dev": "upf1-eth0"
+                    }
+                  ],
+                  "client": null
+                },
+                "gtpu": {
+                  "server": [
+                    {
+                      "dev": "upf1-eth0"
+                    }
+                  ]
+                },
+                "session": [
+                  {
+                    "subnet": "10.100.0.0/16",
+                    "gateway": "10.100.0.1",
+                    "dnn": "internet",
+                    "dev": "ogstun"
+                  },
+                  {
+                    "subnet": "10.200.0.0/16",
+                    "gateway": "10.200.0.1",
+                    "dnn": "internet2",
+                    "dev": "ogstun2"
+                  }
+                ],
+                "metrics": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 9090
+                    }
+                  ]
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "upf1.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/upf1.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/upf1.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "UPF",
+            "volumes": []
+          },
+          {
+            "name": "upf2",
+            "config_display": "✓ upf2.yaml",
+            "config_content": {
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/upf.log"
+                }
+              },
+              "global": null,
+              "upf": {
+                "pfcp": {
+                  "server": [
+                    {
+                      "dev": "upf2-eth0"
+                    }
+                  ],
+                  "client": null
+                },
+                "gtpu": {
+                  "server": [
+                    {
+                      "dev": "upf2-eth0"
+                    }
+                  ]
+                },
+                "session": [
+                  {
+                    "subnet": "10.51.0.0/16",
+                    "dnn": "web1",
+                    "dev": "ogstun3"
+                  },
+                  {
+                    "subnet": "10.52.0.0/16",
+                    "dnn": "web2",
+                    "dev": "ogstun4"
+                  }
+                ],
+                "metrics": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 9090
+                    }
+                  ]
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "upf2.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/upf2.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/upf2.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "UPF",
+            "volumes": []
+          }
+        ],
+        "AMF_configs": [
+          {
+            "name": "amf1",
+            "config_display": "✓ amf.yaml",
+            "config_content": {
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/amf.log"
+                }
+              },
+              "global": null,
+              "amf": {
+                "sbi": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 7777
+                    }
+                  ],
+                  "client": {
+                    "scp": [
+                      {
+                        "uri": "http://scp1:7777"
+                      }
+                    ]
+                  }
+                },
+                "ngap": {
+                  "server": [
+                    {
+                      "dev": "amf1-eth0"
+                    }
+                  ]
+                },
+                "metrics": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 9090
+                    }
+                  ]
+                },
+                "guami": [
+                  {
+                    "plmn_id": {
+                      "mcc": 999,
+                      "mnc": 70
+                    },
+                    "amf_id": {
+                      "region": 2,
+                      "set": 1
+                    }
+                  }
+                ],
+                "tai": [
+                  {
+                    "plmn_id": {
+                      "mcc": 999,
+                      "mnc": 70
+                    },
+                    "tac": 1
+                  }
+                ],
+                "plmn_support": [
+                  {
+                    "plmn_id": {
+                      "mcc": 999,
+                      "mnc": 70
+                    },
+                    "s_nssai": [
+                      {
+                        "sst": 1
+                      }
+                    ]
+                  }
+                ],
+                "security": {
+                  "integrity_order": [
+                    "NIA2",
+                    "NIA1",
+                    "NIA0"
+                  ],
+                  "ciphering_order": [
+                    "NEA0",
+                    "NEA1",
+                    "NEA2"
+                  ]
+                },
+                "network_name": {
+                  "full": "Open5GS",
+                  "short": "Next"
+                },
+                "amf_name": "amf1",
+                "time": {
+                  "t3512": {
+                    "value": 540
+                  }
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "amf.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/amf.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/amf.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "AMF",
+            "volumes": []
+          }
+        ],
+        "SMF_configs": [
+          {
+            "name": "smf1",
+            "config_display": "✓ smf.yaml",
+            "config_content": {
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/smf.log"
+                }
+              },
+              "global": null,
+              "smf": {
+                "sbi": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 7777
+                    }
+                  ],
+                  "client": {
+                    "scp": [
+                      {
+                        "uri": "http://scp1:7777"
+                      }
+                    ]
+                  }
+                },
+                "pfcp": {
+                  "server": [
+                    {
+                      "dev": "smf1-eth0"
+                    }
+                  ],
+                  "client": {
+                    "upf": [
+                      {
+                        "address": "upf1",
+                        "dnn": [
+                          "internet",
+                          "internet2"
+                        ]
+                      },
+                      {
+                        "address": "upf2",
+                        "dnn": [
+                          "web1",
+                          "web2"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "gtpc": {
+                  "server": [
+                    {
+                      "dev": "smf1-eth0"
+                    }
+                  ]
+                },
+                "gtpu": {
+                  "server": [
+                    {
+                      "dev": "smf1-eth0"
+                    }
+                  ]
+                },
+                "metrics": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 9090
+                    }
+                  ]
+                },
+                "session": [
+                  {
+                    "subnet": "10.100.0.0/16",
+                    "gateway": "10.100.0.1",
+                    "dnn": "internet"
+                  },
+                  {
+                    "subnet": "10.200.0.0/16",
+                    "gateway": "10.200.0.1",
+                    "dnn": "internet2"
+                  },
+                  {
+                    "subnet": "10.51.0.0/16",
+                    "gateway": "10.51.0.1",
+                    "dnn": "web1"
+                  },
+                  {
+                    "subnet": "10.52.0.0/16",
+                    "gateway": "10.52.0.1",
+                    "dnn": "web2"
+                  }
+                ],
+                "dns": [
+                  "1.1.1.1",
+                  "8.8.8.8"
+                ],
+                "mtu": 1400,
+                "ctf": {
+                  "enabled": "auto"
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "smf.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/smf.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/smf.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "SMF",
+            "volumes": []
+          }
+        ],
+        "NRF_configs": [
+          {
+            "name": "nrf1",
+            "config_display": "✓ nrf.yaml",
+            "config_content": {
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/nrf.log"
+                }
+              },
+              "global": null,
+              "nrf": {
+                "serving": [
+                  {
+                    "plmn_id": {
+                      "mcc": 999,
+                      "mnc": 70
+                    }
+                  }
+                ],
+                "sbi": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 7777
+                    }
+                  ]
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "nrf.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/nrf.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/nrf.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "NRF",
+            "volumes": []
+          }
+        ],
+        "SCP_configs": [
+          {
+            "name": "scp1",
+            "config_display": "✓ scp.yaml",
+            "config_content": {
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/scp.log"
+                }
+              },
+              "global": null,
+              "scp": {
+                "sbi": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 7777
+                    }
+                  ],
+                  "client": {
+                    "nrf": [
+                      {
+                        "uri": "http://nrf1:7777"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "scp.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/scp.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/scp.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "SCP",
+            "volumes": []
+          }
+        ],
+        "AUSF_configs": [
+          {
+            "name": "ausf1",
+            "config_display": "✓ ausf.yaml",
+            "config_content": {
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/ausf.log"
+                }
+              },
+              "global": null,
+              "ausf": {
+                "sbi": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 7777
+                    }
+                  ],
+                  "client": {
+                    "scp": [
+                      {
+                        "uri": "http://scp1:7777"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "ausf.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/ausf.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/ausf.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "AUSF",
+            "volumes": []
+          }
+        ],
+        "BSF_configs": [
+          {
+            "name": "bsf1",
+            "config_display": "✓ bsf.yaml",
+            "config_content": {
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/bsf.log"
+                }
+              },
+              "global": null,
+              "bsf": {
+                "sbi": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 7777
+                    }
+                  ],
+                  "client": {
+                    "scp": [
+                      {
+                        "uri": "http://scp1:7777"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "bsf.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/bsf.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/bsf.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "BSF",
+            "volumes": []
+          }
+        ],
+        "NSSF_configs": [
+          {
+            "name": "nssf1",
+            "config_display": "✓ nssf.yaml",
+            "config_content": {
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/nssf.log"
+                }
+              },
+              "global": {
+                "max": null
+              },
+              "nssf": {
+                "sbi": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 7777
+                    }
+                  ],
+                  "client": {
+                    "scp": [
+                      {
+                        "uri": "http://scp1:7777"
+                      }
+                    ],
+                    "nsi": [
+                      {
+                        "uri": "http://nrf1:7777",
+                        "s_nssai": {
+                          "sst": 1
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "nssf.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/nssf.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/nssf.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "NSSF",
+            "volumes": []
+          }
+        ],
+        "PCF_configs": [
+          {
+            "name": "pcf1",
+            "config_display": "✓ pcf.yaml",
+            "config_content": {
+              "db_uri": "mongodb://localhost/open5gs",
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/pcf.log"
+                }
+              },
+              "global": null,
+              "pcf": {
+                "sbi": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 7777
+                    }
+                  ],
+                  "client": {
+                    "scp": [
+                      {
+                        "uri": "http://scp1:7777"
+                      }
+                    ]
+                  }
+                },
+                "metrics": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 9090
+                    }
+                  ]
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "pcf.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/pcf.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/pcf.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "PCF",
+            "volumes": []
+          }
+        ],
+        "PCRF_configs": [
+          {
+            "name": "pcrf1",
+            "config_display": "✓ pcrf.yaml",
+            "config_content": {
+              "db_uri": "mongodb://localhost/open5gs",
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/pcrf.log"
+                }
+              },
+              "global": null,
+              "pcrf": {
+                "freeDiameter": "/opt/open5gs/etc/freeDiameter/pcrf.conf"
+              }
+            },
+            "imported": true,
+            "config_filename": "pcrf.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "PCRF",
+            "volumes": [],
+            "config_file_path": ""
+          }
+        ],
+        "UDM_configs": [
+          {
+            "name": "udm1",
+            "config_display": "✓ udm.yaml",
+            "config_content": {
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/udm.log"
+                }
+              },
+              "global": null,
+              "udm": {
+                "hnet": [
+                  {
+                    "id": 1,
+                    "scheme": 1,
+                    "key": "/opt/open5gs/etc/open5gs/hnet/curve25519-1.key"
+                  },
+                  {
+                    "id": 2,
+                    "scheme": 2,
+                    "key": "/opt/open5gs/etc/open5gs/hnet/secp256r1-2.key"
+                  },
+                  {
+                    "id": 3,
+                    "scheme": 1,
+                    "key": "/opt/open5gs/etc/open5gs/hnet/curve25519-3.key"
+                  },
+                  {
+                    "id": 4,
+                    "scheme": 2,
+                    "key": "/opt/open5gs/etc/open5gs/hnet/secp256r1-4.key"
+                  },
+                  {
+                    "id": 5,
+                    "scheme": 1,
+                    "key": "/opt/open5gs/etc/open5gs/hnet/curve25519-5.key"
+                  },
+                  {
+                    "id": 6,
+                    "scheme": 2,
+                    "key": "/opt/open5gs/etc/open5gs/hnet/secp256r1-6.key"
+                  }
+                ],
+                "sbi": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 7777
+                    }
+                  ],
+                  "client": {
+                    "scp": [
+                      {
+                        "uri": "http://scp1:7777"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "udm.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/udm.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/udm.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "UDM",
+            "volumes": []
+          }
+        ],
+        "UDR_configs": [
+          {
+            "name": "udr1",
+            "config_display": "✓ udr.yaml",
+            "config_content": {
+              "db_uri": "mongodb://localhost/open5gs",
+              "logger": {
+                "file": {
+                  "path": "/opt/open5gs/var/log/open5gs/udr.log"
+                }
+              },
+              "global": null,
+              "udr": {
+                "sbi": {
+                  "server": [
+                    {
+                      "dev": "eth0",
+                      "port": 7777
+                    }
+                  ],
+                  "client": {
+                    "scp": [
+                      {
+                        "uri": "http://scp1:7777"
+                      }
+                    ]
+                  }
+                }
+              }
+            },
+            "imported": true,
+            "config_filename": "udr.yaml",
+            "config_file_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/udr.yaml",
+            "config_path": "/home/litfan/Code/NetFlux5G/netflux5g-editor/src/export/5g-configs/udr.yaml",
+            "image": "adaptive/open5gs:1.0",
+            "component_type": "UDR",
+            "volumes": []
+          }
+        ],
+        "VGCore_DockerImage": "adaptive/open5gs:latest",
+        "VGCore_DockerNetwork": "netflux5g",
+        "VGCore_DatabaseURI": "mongodb://netflux5g-mongodb/open5gs",
+        "VGCore_NetworkInterface": "eth0",
+        "VGCore_MCC": "999",
+        "VGCore_MNC": "70",
+        "VGCore_TAC": "1",
+        "VGCore_SST": "1",
+        "VGCore_SD": "0xffffff",
+        "VGCore_BridgePriority": "32768",
+        "VGCore_OVSController": "tcp:172.18.0.1:6653",
+        "VGCore_ControllerPort": "6653",
+        "VGCore_OVSBridgeName": "br-open5gs",
+        "VGCore_OpenFlowProtocols": "OpenFlow13",
+        "VGCore_OVSFailMode": "secure",
+        "VGCore_OVSDatapath": "kernel",
+        "VGCore_DockerEnabled": true,
+        "VGCore_EnableNAT": true,
+        "VGCore_STPEnabled": true,
+        "VGCore_OVSEnabled": true,
+        "docker_docker_enabled": true,
+        "docker_docker_image": "adaptive/open5gs:latest",
+        "docker_docker_network": "netflux5g",
+        "docker_database_uri": "mongodb://netflux5g-mongodb/open5gs",
+        "5gcore_network_interface": "eth0",
+        "5gcore_mcc": "999",
+        "5gcore_mnc": "70",
+        "5gcore_tac": "1",
+        "5gcore_sst": "1",
+        "5gcore_sd": "0xffffff",
+        "5gcore_enable_nat": true,
+        "ovs_ovs_enabled": true,
+        "ovs_ovs_controller": "tcp:172.18.0.1:6653",
+        "ovs_ovs_bridge_name": "br-open5gs",
+        "ovs_ovs_fail_mode": "secure",
+        "ovs_openflow_protocols": "OpenFlow13",
+        "ovs_ovs_datapath": "kernel",
+        "ovs_controller_port": "6653",
+        "ovs_bridge_priority": "32768",
+        "ovs_stp_enabled": true
+      },
+      "created_date": "Rab Jul 16 06:39:55 2025",
+      "component_id": 131457036129136
+    },
+    {
+      "name": "GNB #1",
+      "type": "GNB",
+      "x": -811.9627162499999,
+      "y": -32.3562034375,
+      "properties": {
+        "name": "GNB #1",
+        "type": "GNB",
+        "x": -811.9627162499999,
+        "y": -32.3562034375,
+        "GNB_Range": 300,
+        "range": 300.0,
+        "GNB_AMFHostName": "amf1",
+        "GNB_GNBHostName": "GNB__1",
+        "GNB_TAC": "1",
+        "GNB_MCC": "999",
+        "GNB_MNC": "70",
+        "GNB_SST": "1",
+        "GNB_SD": "0xffffff",
+        "GNB_Power": 24,
+        "GNB_AP_SSID": "gnb-hotspot1",
+        "qt_spinbox_lineedit": "11",
+        "GNB_AP_Password": "",
+        "GNB_AP_BridgeName": "",
+        "GNB_OVS_Controller": "tcp:172.18.0.1:6653",
+        "GNB_N2_Interface": "GNB__1-eth0",
+        "GNB_N3_Interface": "GNB__1-eth0",
+        "GNB_Radio_Interface": "GNB__1-eth0",
+        "GNB_AP_Mode": "g",
+        "GNB_OVS_FailMode": "secure",
+        "GNB_OVS_Protocols": "OpenFlow13",
+        "GNB_OVS_Datapath": "kernel",
+        "GNB_AP_Enabled": true,
+        "GNB_AP_Channel": 11,
+        "ap_ap_enabled": "true",
+        "5g_amf_hostname": "amf1",
+        "5g_gnb_hostname": "GNB__1",
+        "5g_tac": "1",
+        "5g_mcc": "999",
+        "5g_mnc": "70",
+        "5g_sst": "1",
+        "5g_sd": "0xffffff",
+        "5g_n2_iface": "eth0",
+        "5g_n3_iface": "eth0",
+        "5g_radio_iface": "eth0",
+        "wireless_txpower": 24,
+        "wireless_range": 300,
+        "ap_ap_ssid": "gnb-hotspot1",
+        "ap_ap_channel": "11",
+        "ap_ap_mode": "g",
+        "ap_ap_passwd": "",
+        "ap_ap_bridge_name": "br-gnb",
+        "ap_ovs_controller": "tcp:172.18.0.1:6653",
+        "ap_ap_failmode": "secure",
+        "ap_openflow_protocols": "OpenFlow13",
+        "GNB_Network_Interface": "",
+        "GNB_OVS_BridgeName": "",
+        "GNB_OVS_BridgeInterfaces": "auto",
+        "GNB_OVS_ControllerIP": "netflux5g-onos-controller",
+        "GNB_STP_Enabled": true,
+        "GNB_OVS_Enabled": true,
+        "GNB_OVS_AutoSetup": false,
+        "GNB_Bridge_Priority": 8,
+        "GNB_OVS_ControllerPort": 6653,
+        "ovs_ovs_enabled": "true",
+        "ovs_ovs_controller": "tcp:172.18.0.1:6653",
+        "ovs_controller_ip": "netflux5g-onos-controller",
+        "ovs_controller_port": "6653",
+        "ovs_ovs_bridge_name": "br-gnb",
+        "ovs_ovs_fail_mode": "secure",
+        "ovs_openflow_protocols": "OpenFlow13",
+        "ovs_ovs_datapath": "kernel",
+        "ovs_bridge_interfaces": "auto",
+        "ovs_ovs_auto_setup": "false",
+        "network_n2_iface": "GNB__1-eth0",
+        "network_n3_iface": "GNB__1-eth0",
+        "network_radio_iface": "GNB__1-eth0",
+        "network_network_interface": "eth0",
+        "network_bridge_priority": "8",
+        "network_stp_enabled": "true",
+        "network_ueransim_component": "gnb",
+        "ueransim_component": "gnb",
+        "GNB_AMF_IP": "",
+        "5g_amf_ip": "10.0.0.3"
+      },
+      "created_date": "Rab Jul 16 06:39:55 2025",
+      "component_id": 131457036129712
+    }
+  ],
+  "links": [
+    {
+      "source": "GNB #1",
+      "destination": "VGcore #1",
+      "type": "ethernet",
+      "properties": {
+        "name": "link_688",
+        "type": "ethernet",
+        "source": "GNB #1",
+        "destination": "VGcore #1",
+        "bandwidth": "",
+        "delay": "",
+        "loss": "",
+        "source_ip": "",
+        "dest_ip": "",
+        "enable_ip": false
+      },
+      "name": "link_688",
+      "created_date": "Rab Jul 16 06:39:55 2025"
+    }
+  ],
+  "canvas_properties": {
+    "zoom_level": 0.49717673529828976,
+    "show_grid": false
+  }
+}

@@ -1,0 +1,137 @@
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+  scrape_timeout: 8s
+
+rule_files:
+  - "alert_rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - netflux5g_alertmanager:9093
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: "node_exporter"
+    static_configs:
+      - targets: ["netflux5g_node-exporter:9100"]
+    scrape_interval: 5s
+    scrape_timeout: 3s
+
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["netflux5g_cadvisor:8080"]
+    scrape_interval: 5s
+    scrape_timeout: 3s
+    metrics_path: "/metrics"
+
+  - job_name: "icmp-probe"
+    metrics_path: /probe
+    params:
+      module: [icmp]
+    static_configs:
+      - targets:
+          - mn.amf1 # AMF
+          - mn.smf1 # SMF
+          - mn.upf1 # UPF1
+          - mn.upf2 # UPF2
+          - mn.nrf1 # NRF
+          - mn.pcf1 # PCF
+          - mn.GNB__1 # gNB1
+          - mn.GNB__2 # gNB2
+          - mn.UE__1 # UE1
+          - mn.UE__2 # UE2
+          - mn.UE__3 # UE3
+          - mn.UE__4 # UE4
+          - mn.UE__5 # UE5
+          - mn.UE__6 # UE6
+          - netflux5g-mongodb # MongoDB
+          - netflux5g-webui # WebUI
+          - netflux5g-onos-controller # ONOS Controller
+          - 8.8.8.8 # External connectivity test
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: netflux5g_blackbox-exporter:9115
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Docker container discovery untuk auto-detect containers
+  - job_name: "docker-containers"
+    docker_sd_configs:
+      - host: "unix:///var/run/docker.sock"
+        port: 9090
+    relabel_configs:
+      # Hanya monitor container dengan label tertentu
+      - source_labels: [__meta_docker_container_label_monitoring]
+        regex: "enabled"
+        action: keep
+      # Set instance name dari container name
+      - source_labels: [__meta_docker_container_name]
+        target_label: instance
+      # Filter hanya container 5G Core dan UERANSIM
+      - source_labels: [__meta_docker_container_name]
+        regex: "(mn\\..*|netflux5g.*)"
+        action: keep
+    scrape_interval: 5s
+    scrape_timeout: 3s
+
+  - job_name: "5g-core-containers"
+    static_configs:
+      - targets:
+          - mn.amf1:9090 # AMF metrics (if available)
+          - mn.smf1:9090 # SMF metrics (if available)
+          - mn.upf1:9090 # UPF1 metrics (if available)
+          - mn.upf2:9090 # UPF2 metrics (if available)
+          - mn.nrf1:9090 # NRF metrics (if available)
+          - mn.ausf1:9090 # AUSF metrics (if available)
+          - mn.udm1:9090 # UDM metrics (if available)
+          - mn.udr1:9090 # UDR metrics (if available)
+          - mn.pcf1:9090 # PCF metrics (if available)
+          - mn.bsf1:9090 # BSF metrics (if available)
+          - mn.nssf1:9090 # NSSF metrics (if available)
+          - mn.scp1:9090 # SCP metrics (if available)
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+
+  - job_name: "ueransim-containers"
+    static_configs:
+      - targets:
+          - mn.GNB__1:9091 # gNB1 metrics (if available)
+          - mn.GNB__2:9091 # gNB2 metrics (if available)
+          - mn.UE__1:9091 # UE1 metrics (if available)
+          - mn.UE__2:9091 # UE2 metrics (if available)
+          - mn.UE__3:9091 # UE3 metrics (if available)
+          - mn.UE__4:9091 # UE4 metrics (if available)
+          - mn.UE__5:9091 # UE5 metrics (if available)
+          - mn.UE__6:9091 # UE6 metrics (if available)
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+
+  - job_name: "infrastructure-services"
+    static_configs:
+      - targets:
+          - netflux5g-mongodb:27017 # MongoDB (if metrics available)
+          - netflux5g-webui:9999 # WebUI (if metrics available)
+          - netflux5g-onos-controller:8181 # ONOS Controller (if metrics available)
+    scrape_interval: 30s
+    scrape_timeout: 10s
+    metrics_path: /metrics
+
+  # Custom NetFlux5G metrics exporter
+  - job_name: "netflux5g-metrics"
+    static_configs:
+      - targets: ["netflux5g_metrics_exporter:8000"]
+    scrape_interval: 10s
+    scrape_timeout: 5s
+    metrics_path: /metrics
