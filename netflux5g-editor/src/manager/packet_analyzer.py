@@ -61,7 +61,7 @@ class PacketAnalyzerDeploymentWorker(QThread):
             self.status_updated.emit("Checking if Webshark image exists...")
             self.progress_updated.emit(10)
             
-            # Use consistent image name
+            # Use consistent image name matching your Dockerfile
             image_name = "adaptive/netflux5g-webshark:latest"
             
             # Build image if not exists
@@ -73,9 +73,7 @@ class PacketAnalyzerDeploymentWorker(QThread):
                 if self._check_cancelled():
                     return
                     
-                self.status_updated.emit("Building Webshark Docker image...")
-                self.progress_updated.emit(20)
-                DockerUtils.build_image(image_name, webshark_path)
+
             
             if self._check_cancelled():
                 return
@@ -93,11 +91,20 @@ class PacketAnalyzerDeploymentWorker(QThread):
             builder.set_network(self.network_name)
             builder.add_port('8085:8085')
             
+            # Mount captures directory - ensure absolute path
             if self.captures_path and os.path.exists(self.captures_path):
-                builder.add_volume(f"{os.path.abspath(self.captures_path)}:/captures")
+                abs_captures_path = os.path.abspath(self.captures_path)
+                builder.add_volume(f"{abs_captures_path}:/captures")
+                debug_print(f"Mounting captures: {abs_captures_path} -> /captures")
+            else:
+                warning_print("Captures path not found, container will use internal directory")
             
-            builder.add_env('SHARKD_SOCKET=/home/node/sharkd.sock')
+            # Environment variables matching your entrypoint expectations
+            builder.add_env('SHARKD_SOCKET=/captures/sharkd.sock')
             builder.add_env('CAPTURES_PATH=/captures/')
+            
+            # Add restart policy for better reliability
+            builder.add_restart_policy('unless-stopped')
             
             self.status_updated.emit("Deploying Webshark container...")
             self.progress_updated.emit(50)
@@ -117,9 +124,14 @@ class PacketAnalyzerDeploymentWorker(QThread):
                 
                 if DockerUtils.is_container_running(self.container_name):
                     self.progress_updated.emit(100)
-                    self.operation_finished.emit(True, f"Webshark container '{self.container_name}' deployed successfully on port 8085.")
+                    self.operation_finished.emit(True, f"Webshark container '{self.container_name}' deployed successfully.\nAccess at: http://localhost:8085/webshark/")
                 else:
-                    self.operation_finished.emit(False, "Container started but is not running properly.")
+                    # Try to get container logs for debugging
+                    try:
+                        logs = DockerUtils.get_container_logs(self.container_name)
+                        self.operation_finished.emit(False, f"Container started but is not running properly.\nLogs: {logs[:500]}...")
+                    except:
+                        self.operation_finished.emit(False, "Container started but is not running properly. Check Docker logs manually.")
             else:
                 self.operation_finished.emit(False, f"Failed to deploy container: {msg}")
                 
@@ -317,9 +329,17 @@ class PacketAnalyzerManager:
             builder = DockerContainerBuilder(image=image_name, container_name=container_name)
             builder.set_network("netflux5g")
             builder.add_port('8085:8085')
-            builder.add_volume(f'{os.path.abspath(captures_path)}:/captures')
-            builder.add_env('SHARKD_SOCKET=/home/node/sharkd.sock')
+            
+            # Mount captures directory with absolute path
+            abs_captures_path = os.path.abspath(captures_path)
+            builder.add_volume(f'{abs_captures_path}:/captures')
+            
+            # Environment variables matching your entrypoint expectations  
+            builder.add_env('SHARKD_SOCKET=/captures/sharkd.sock')
             builder.add_env('CAPTURES_PATH=/captures/')
+            
+            # Add restart policy
+            builder.add_restart_policy('unless-stopped')
             
             success, msg = builder.run()
             
@@ -341,16 +361,21 @@ class PacketAnalyzerManager:
             webshark_path = os.path.join(os.path.dirname(current_dir), "automation", "webshark")
             captures_path = os.path.join(webshark_path, "captures")
             
-            if os.path.exists(captures_path):
-                return os.path.abspath(captures_path)
+            # Create captures directory if it doesn't exist
+            if not os.path.exists(captures_path):
+                try:
+                    os.makedirs(captures_path, exist_ok=True)
+                    debug_print(f"Created captures directory: {captures_path}")
+                except OSError as e:
+                    error_print(f"Failed to create captures directory: {e}")
+                    return None
+            
+            # Verify the directory is writable
+            if not os.access(captures_path, os.W_OK):
+                error_print(f"Captures directory is not writable: {captures_path}")
+                return None
                 
-            # Try to create the captures directory if it doesn't exist
-            os.makedirs(captures_path, exist_ok=True)
-            if os.path.exists(captures_path):
-                return os.path.abspath(captures_path)
-                
-            error_print(f"Captures directory not found and could not be created. Tried: {captures_path}")
-            return None
+            return os.path.abspath(captures_path)
             
         except Exception as e:
             error_print(f"Error getting captures path: {e}")
@@ -375,7 +400,10 @@ class PacketAnalyzerManager:
     def _check_docker_available(self):
         """Check if Docker is available and running."""
         try:
-            return DockerUtils.check_docker_available(self.main_window, show_error=False)
+            result = DockerUtils.check_docker_available(self.main_window, show_error=False)
+            if not result:
+                debug_print("Docker is not available or not running")
+            return result
         except Exception as e:
             error_print(f"Error checking Docker availability: {e}")
             return False
