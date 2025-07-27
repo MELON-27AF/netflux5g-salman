@@ -2,9 +2,6 @@ global:
   scrape_interval: 10s
   evaluation_interval: 10s
   scrape_timeout: 8s
-  external_labels:
-    cluster: 'netflux5g'
-    monitor: 'netflux5g-prometheus'
 
 rule_files:
   - "alert_rules.yml"
@@ -16,20 +13,16 @@ alerting:
             - netflux5g-alertmanager:9093
 
 scrape_configs:
-  # Prometheus self-monitoring
   - job_name: "prometheus"
     static_configs:
       - targets: ["localhost:9090"]
-    scrape_interval: 15s
 
-  # Node Exporter for system metrics
   - job_name: "node_exporter"
     static_configs:
       - targets: ["netflux5g-node-exporter:9100"]
     scrape_interval: 5s
     scrape_timeout: 3s
 
-  # cAdvisor for container metrics
   - job_name: "cadvisor"
     static_configs:
       - targets: ["netflux5g-cadvisor:8080"]
@@ -43,25 +36,31 @@ scrape_configs:
       - targets: ["netflux5g-blackbox-exporter:9115"]
     scrape_interval: 30s
 
-  # ICMP probes for 5G Core Network Functions
-  - job_name: "icmp-5g-core"
+  # ICMP probes using blackbox exporter
+  - job_name: "icmp-probe"
     metrics_path: /probe
     params:
       module: [icmp]
     static_configs:
       - targets:
-          - mn.amf1    # Access and Mobility Management Function
-          - mn.smf1    # Session Management Function
-          - mn.upf1    # User Plane Function 1
-          - mn.upf2    # User Plane Function 2
-          - mn.nrf1    # Network Repository Function
-          - mn.ausf1   # Authentication Server Function
-          - mn.udm1    # Unified Data Management
-          - mn.udr1    # Unified Data Repository
-          - mn.pcf1    # Policy Control Function
-          - mn.bsf1    # Binding Support Function
-          - mn.nssf1   # Network Slice Selection Function
-          - mn.scp1    # Service Communication Proxy
+          - mn.amf1 # AMF
+          - mn.smf1 # SMF
+          - mn.upf1 # UPF1
+          - mn.upf2 # UPF2
+          - mn.nrf1 # NRF
+          - mn.pcf1 # PCF
+          - mn.GNB__1 # gNB1
+          - mn.GNB__2 # gNB2
+          - mn.UE__1 # UE1
+          - mn.UE__2 # UE2
+          - mn.UE__3 # UE3
+          - mn.UE__4 # UE4
+          - mn.UE__5 # UE5
+          - mn.UE__6 # UE6
+          - netflux5g-mongodb # MongoDB
+          - netflux5g-webui # WebUI
+          - netflux5g-onos-controller # ONOS Controller
+          - 8.8.8.8 # External connectivity test
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target
@@ -72,256 +71,71 @@ scrape_configs:
     scrape_interval: 10s
     scrape_timeout: 5s
 
-  # ICMP probes for gNodeBs and UEs (optimized)
-  - job_name: "icmp-ueransim"
-    metrics_path: /probe
-    params:
-      module: [icmp_ue]
-    static_configs:
-      - targets:
-          - mn.GNB__1  # gNodeB 1
-          - mn.GNB__2  # gNodeB 2
-          - mn.UE__1   # User Equipment 1
-          - mn.UE__2   # User Equipment 2
-          - mn.UE__3   # User Equipment 3
-          - mn.UE__4   # User Equipment 4
-          - mn.UE__5   # User Equipment 5
-          - mn.UE__6   # User Equipment 6
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: netflux5g-blackbox-exporter:9115
-    scrape_interval: 15s
-    scrape_timeout: 3s
-
-  # ICMP probes for infrastructure services
-  - job_name: "icmp-infrastructure"
-    metrics_path: /probe
-    params:
-      module: [icmp]
-    static_configs:
-      - targets:
-          - netflux5g-mongodb      # MongoDB Database
-          - netflux5g-webui        # NetFlux5G Web Interface
-          - netflux5g-onos-controller  # ONOS SDN Controller
-          - netflux5g-webshark     # Wireshark Web Interface
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: netflux5g-blackbox-exporter:9115
-    scrape_interval: 20s
-    scrape_timeout: 5s
-
-  # External connectivity test
-  - job_name: "icmp-external"
-    metrics_path: /probe
-    params:
-      module: [icmp_external]
-    static_configs:
-      - targets:
-          - 8.8.8.8        # Google DNS
-          - 1.1.1.1        # Cloudflare DNS
-          - google.com     # External web service
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: netflux5g-blackbox-exporter:9115
-    scrape_interval: 30s
-    scrape_timeout: 8s
-
-  # HTTP probes for web interfaces
-  - job_name: "http-web-interfaces"
-    metrics_path: /probe
-    params:
-      module: [http_2xx]
-    static_configs:
-      - targets:
-          - http://netflux5g-grafana:3000/login
-          - http://netflux5g-webui:3000
-          - http://netflux5g-prometheus:9090/-/healthy
-          - http://netflux5g-alertmanager:9093/-/healthy
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: netflux5g-blackbox-exporter:9115
-    scrape_interval: 30s
-    scrape_timeout: 10s
-
-  # HTTP probes for Grafana specifically
-  - job_name: "http-grafana"
-    metrics_path: /probe
-    params:
-      module: [http_grafana]
-    static_configs:
-      - targets:
-          - http://netflux5g-grafana:3000/api/health
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: netflux5g-blackbox-exporter:9115
-    scrape_interval: 60s
-
-  # TCP connectivity probes for critical ports
-  - job_name: "tcp-5g-core-ports"
-    metrics_path: /probe
-    params:
-      module: [tcp_connect_5g_sbi]
-    static_configs:
-      - targets:
-          - mn.amf1:80     # AMF SBI
-          - mn.smf1:80     # SMF SBI
-          - mn.nrf1:80     # NRF SBI
-          - mn.udm1:80     # UDM SBI
-          - mn.pcf1:80     # PCF SBI
-          - mn.ausf1:80    # AUSF SBI
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: netflux5g-blackbox-exporter:9115
-    scrape_interval: 20s
-    scrape_timeout: 5s
-
-  # TCP connectivity for database services
-  - job_name: "tcp-database-ports"
-    metrics_path: /probe
-    params:
-      module: [tcp_connect_db]
-    static_configs:
-      - targets:
-          - netflux5g-mongodb:27017  # MongoDB
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: netflux5g-blackbox-exporter:9115
-    scrape_interval: 30s
-    scrape_timeout: 8s
-
-  # TCP connectivity for ONOS controller
-  - job_name: "tcp-onos-ports"
-    metrics_path: /probe
-    params:
-      module: [tcp_connect]
-    static_configs:
-      - targets:
-          - netflux5g-onos-controller:8181  # ONOS GUI
-          - netflux5g-onos-controller:8101  # ONOS CLI
-          - netflux5g-onos-controller:6653  # OpenFlow
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: netflux5g-blackbox-exporter:9115
-    scrape_interval: 45s
-
-  # DNS resolution tests
-  - job_name: "dns-resolution"
-    metrics_path: /probe
-    params:
-      module: [dns_udp]
-    static_configs:
-      - targets:
-          - 8.8.8.8:53     # Google DNS
-          - 1.1.1.1:53     # Cloudflare DNS
-    relabel_configs:
-      - source_labels: [__address__]
-        target_label: __param_target
-      - source_labels: [__param_target]
-        target_label: instance
-      - target_label: __address__
-        replacement: netflux5g-blackbox-exporter:9115
-    scrape_interval: 60s
-
-  # Docker container discovery for auto-detect containers
+  # Docker container discovery untuk auto-detect containers
   - job_name: "docker-containers"
     docker_sd_configs:
       - host: "unix:///var/run/docker.sock"
         port: 9090
     relabel_configs:
-      # Only monitor containers with monitoring label
+      # Hanya monitor container dengan label tertentu
       - source_labels: [__meta_docker_container_label_monitoring]
         regex: "enabled"
         action: keep
-      # Set instance name from container name
+      # Set instance name dari container name
       - source_labels: [__meta_docker_container_name]
         target_label: instance
-      # Filter only 5G Core and UERANSIM containers
+      # Filter hanya container 5G Core dan UERANSIM
       - source_labels: [__meta_docker_container_name]
         regex: "(mn\\..*|netflux5g.*)"
         action: keep
     scrape_interval: 5s
     scrape_timeout: 3s
 
-  # 5G Core containers metrics (if they expose metrics)
   - job_name: "5g-core-containers"
     static_configs:
       - targets:
-          - mn.amf1:9090   # AMF metrics (if available)
-          - mn.smf1:9090   # SMF metrics (if available)
-          - mn.upf1:9090   # UPF1 metrics (if available)
-          - mn.upf2:9090   # UPF2 metrics (if available)
-          - mn.nrf1:9090   # NRF metrics (if available)
-          - mn.ausf1:9090  # AUSF metrics (if available)
-          - mn.udm1:9090   # UDM metrics (if available)
-          - mn.udr1:9090   # UDR metrics (if available)
-          - mn.pcf1:9090   # PCF metrics (if available)
-          - mn.bsf1:9090   # BSF metrics (if available)
-          - mn.nssf1:9090  # NSSF metrics (if available)
-          - mn.scp1:9090   # SCP metrics (if available)
+          - mn.amf1:9090 # AMF metrics (if available)
+          - mn.smf1:9090 # SMF metrics (if available)
+          - mn.upf1:9090 # UPF1 metrics (if available)
+          - mn.upf2:9090 # UPF2 metrics (if available)
+          - mn.nrf1:9090 # NRF metrics (if available)
+          - mn.ausf1:9090 # AUSF metrics (if available)
+          - mn.udm1:9090 # UDM metrics (if available)
+          - mn.udr1:9090 # UDR metrics (if available)
+          - mn.pcf1:9090 # PCF metrics (if available)
+          - mn.bsf1:9090 # BSF metrics (if available)
+          - mn.nssf1:9090 # NSSF metrics (if available)
+          - mn.scp1:9090 # SCP metrics (if available)
     scrape_interval: 15s
     scrape_timeout: 10s
     metrics_path: /metrics
 
-  # UERANSIM containers metrics (if they expose metrics)
   - job_name: "ueransim-containers"
     static_configs:
       - targets:
           - mn.GNB__1:9091 # gNB1 metrics (if available)
           - mn.GNB__2:9091 # gNB2 metrics (if available)
-          - mn.UE__1:9091  # UE1 metrics (if available)
-          - mn.UE__2:9091  # UE2 metrics (if available)
-          - mn.UE__3:9091  # UE3 metrics (if available)
-          - mn.UE__4:9091  # UE4 metrics (if available)
-          - mn.UE__5:9091  # UE5 metrics (if available)
-          - mn.UE__6:9091  # UE6 metrics (if available)
+          - mn.UE__1:9091 # UE1 metrics (if available)
+          - mn.UE__2:9091 # UE2 metrics (if available)
+          - mn.UE__3:9091 # UE3 metrics (if available)
+          - mn.UE__4:9091 # UE4 metrics (if available)
+          - mn.UE__5:9091 # UE5 metrics (if available)
+          - mn.UE__6:9091 # UE6 metrics (if available)
     scrape_interval: 15s
     scrape_timeout: 10s
     metrics_path: /metrics
 
-  # Infrastructure services metrics
   - job_name: "infrastructure-services"
     static_configs:
       - targets:
-          - netflux5g-mongodb:27017        # MongoDB (if metrics available)
-          - netflux5g-webui:9999           # WebUI (if metrics available)
+          - netflux5g-mongodb:27017 # MongoDB (if metrics available)
+          - netflux5g-webui:9999 # WebUI (if metrics available)
           - netflux5g-onos-controller:8181 # ONOS Controller (if metrics available)
     scrape_interval: 30s
     scrape_timeout: 10s
     metrics_path: /metrics
 
-  # Custom NetFlux5G metrics exporter (if implemented)
+  # Custom NetFlux5G metrics exporter
   - job_name: "netflux5g-metrics"
     static_configs:
       - targets: ["netflux5g-metrics-exporter:8000"]
