@@ -41,19 +41,6 @@ receivers:
         headers:
           Priority: "high"
 
-    slack_configs:
-      - api_url: "YOUR_SLACK_WEBHOOK_URL"
-        channel: "#alerts"
-        username: "Prometheus AlertManager"
-        color: "danger"
-        title: "CRITICAL ALERT: {{ .GroupLabels.alertname }}"
-        text: |
-          Service: {{ .GroupLabels.service }}
-          {{ range .Alerts }}
-          Summary: {{ .Annotations.summary }}
-          Description: {{ .Annotations.description }}
-          {{ end }}
-
   - name: "warning-alerts"
     email_configs:
       - to: "monitoring@netflux5g.local"
@@ -67,19 +54,6 @@ receivers:
           Summary: {{ .Annotations.summary }}
           Description: {{ .Annotations.description }}
           Started: {{ .StartsAt }}
-          {{ end }}
-
-    slack_configs:
-      - api_url: "YOUR_SLACK_WEBHOOK_URL"
-        channel: "#monitoring"
-        username: "Prometheus AlertManager"
-        color: "warning"
-        title: "WARNING: {{ .GroupLabels.alertname }}"
-        text: |
-          Service: {{ .GroupLabels.service }}
-          {{ range .Alerts }}
-          Summary: {{ .Annotations.summary }}
-          Description: {{ .Annotations.description }}
           {{ end }}
 
 inhibit_rules:

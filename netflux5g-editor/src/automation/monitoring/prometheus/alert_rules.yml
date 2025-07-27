@@ -1,70 +1,152 @@
-# Enhanced Prometheus Alert Rules for 5G Core Monitoring with Blackbox Integration
+# Prometheus Alert Rules for 5G Core Monitoring with Blackbox Integration
 
 groups:
-  - name: blackbox_network_alerts
+  - name: 5g_core_alerts
     rules:
-      # 5G Core Network Function Connectivity
+      # High CPU Usage Alert
+      - alert: HighCPUUsage
+        expr: rate(container_cpu_usage_seconds_total[5m]) * 100 > 90
+        for: 2m
+        labels:
+          severity: critical
+          service: "{{ $labels.name }}"
+        annotations:
+          summary: "High CPU usage detected"
+          description: "Container {{ $labels.name }} has CPU usage above 90% for more than 2 minutes"
+
+      # High Memory Usage Alert
+      - alert: HighMemoryUsage
+        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) * 100 > 90
+        for: 2m
+        labels:
+          severity: critical
+          service: "{{ $labels.name }}"
+        annotations:
+          summary: "High memory usage detected"
+          description: "Container {{ $labels.name }} has memory usage above 90% for more than 2 minutes"
+
+      # Container Down Alert
+      - alert: ContainerDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: "{{ $labels.job }}"
+        annotations:
+          summary: "Container is down"
+          description: "Container {{ $labels.job }} has been down for more than 1 minute"
+
+      # 5G Core Service Down (Enhanced for Blackbox)
       - alert: FiveGCoreServiceDown
-        expr: probe_success{job="icmp-5g-core"} == 0
+        expr: probe_success == 0
         for: 30s
         labels:
           severity: critical
           service: "5g-core"
           target: "{{ $labels.instance }}"
-          alert_type: "connectivity"
         annotations:
-          summary: "5G Core Network Function is unreachable"
-          description: "5G Core NF {{ $labels.instance }} is unreachable via ICMP probe for {{ $humanizeDuration .For }}"
-          runbook_url: "https://docs.netflux5g.local/runbooks/connectivity"
+          summary: "5G Core service is unreachable"
+          description: "5G Core service at {{ $labels.instance }} is unreachable"
 
-      # UERANSIM Connectivity Issues
-      - alert: UERANSIMConnectivityIssue
-        expr: probe_success{job="icmp-ueransim"} == 0
-        for: 1m
-        labels:
-          severity: warning
-          service: "ueransim"
-          target: "{{ $labels.instance }}"
-          alert_type: "connectivity"
-        annotations:
-          summary: "UERANSIM component connectivity issue"
-          description: "UERANSIM component {{ $labels.instance }} is unreachable for {{ $humanizeDuration .For }}"
-
-      # Infrastructure Services Down
-      - alert: InfrastructureServiceDown
-        expr: probe_success{job="icmp-infrastructure"} == 0
-        for: 2m
-        labels:
-          severity: critical
-          service: "infrastructure"
-          target: "{{ $labels.instance }}"
-          alert_type: "connectivity"
-        annotations:
-          summary: "Infrastructure service is down"
-          description: "Infrastructure service {{ $labels.instance }} has been unreachable for {{ $humanizeDuration .For }}"
-
-      # External Connectivity Loss
-      - alert: ExternalConnectivityLoss
-        expr: probe_success{job="icmp-external"} == 0
+      # Low Registration Success Rate
+      - alert: LowRegistrationSuccessRate
+        expr: (sum(rate(open5gs_amf_registration_success_total[5m])) / sum(rate(open5gs_amf_registration_attempts_total[5m]))) * 100 < 80
         for: 5m
         labels:
           severity: warning
-          service: "external"
-          target: "{{ $labels.instance }}"
-          alert_type: "connectivity"
+          service: "amf"
         annotations:
-          summary: "External connectivity lost"
-          description: "External connectivity to {{ $labels.instance }} has been lost for {{ $humanizeDuration .For }}"
+          summary: "Low UE registration success rate"
+          description: "UE registration success rate is below 80% for the last 5 minutes"
 
-      # High Network Latency
-      - alert: HighNetworkLatency
+      # Low PDU Session Success Rate
+      - alert: LowPDUSessionSuccessRate
+        expr: (sum(rate(open5gs_smf_pdu_session_establishment_success_total[5m])) / sum(rate(open5gs_smf_pdu_session_establishment_attempts_total[5m]))) * 100 < 80
+        for: 5m
+        labels:
+          severity: warning
+          service: "smf"
+        annotations:
+          summary: "Low PDU session establishment success rate"
+          description: "PDU session establishment success rate is below 80% for the last 5 minutes"
+
+      # High Network Response Time (Enhanced for Blackbox)
+      - alert: HighNetworkResponseTime
+        expr: avg(probe_duration_seconds) * 1000 > 500
+        for: 3m
+        labels:
+          severity: warning
+          service: "network"
+        annotations:
+          summary: "High network response time"
+          description: "Average network response time is above 500ms for the last 3 minutes"
+
+      # Container Restart Alert
+      - alert: ContainerRestart
+        expr: rate(container_start_time_seconds[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: "{{ $labels.name }}"
+        annotations:
+          summary: "Container restarted"
+          description: "Container {{ $labels.name }} has restarted"
+
+      # High System Load
+      - alert: HighSystemLoad
+        expr: node_load15 > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: "system"
+        annotations:
+          summary: "High system load"
+          description: "System load average (15m) is above 2 for the last 5 minutes"
+
+      # Disk Space Low
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 10
+        for: 5m
+        labels:
+          severity: critical
+          service: "system"
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is below 10% on filesystem {{ $labels.mountpoint }}"
+
+      # High Network Traffic
+      - alert: HighNetworkTraffic
+        expr: rate(container_network_receive_bytes_total[5m]) > 100000000 or rate(container_network_transmit_bytes_total[5m]) > 100000000
+        for: 5m
+        labels:
+          severity: warning
+          service: "{{ $labels.name }}"
+        annotations:
+          summary: "High network traffic"
+          description: "Container {{ $labels.name }} has high network traffic (>100MB/s) for the last 5 minutes"
+
+  # New Blackbox Monitoring Alerts
+  - name: blackbox_monitoring_alerts
+    rules:
+      # Blackbox Exporter Down
+      - alert: BlackboxExporterDown
+        expr: up{job="blackbox-exporter"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: "blackbox-exporter"
+        annotations:
+          summary: "Blackbox Exporter is down"
+          description: "Blackbox Exporter has been down for 2 minutes"
+
+      # High Network Latency (Blackbox specific)
+      - alert: HighNetworkLatencyBlackbox
         expr: probe_duration_seconds > 0.5
         for: 3m
         labels:
           severity: warning
           service: "network"
           target: "{{ $labels.instance }}"
-          alert_type: "performance"
         annotations:
           summary: "High network latency detected"
           description: "Network latency to {{ $labels.instance }} is {{ $value }}s, exceeding 500ms threshold"
@@ -77,308 +159,58 @@ groups:
           severity: critical
           service: "network"
           target: "{{ $labels.instance }}"
-          alert_type: "performance"
         annotations:
           summary: "Very high network latency detected"
           description: "Network latency to {{ $labels.instance }} is {{ $value }}s, exceeding 1s critical threshold"
 
-  - name: blackbox_http_alerts
-    rules:
-      # Web Interface Down
-      - alert: WebInterfaceDown
-        expr: probe_success{job="http-web-interfaces"} == 0
-        for: 1m
-        labels:
-          severity: critical
-          service: "web-interface"
-          target: "{{ $labels.instance }}"
-          alert_type: "http"
-        annotations:
-          summary: "Web interface is down"
-          description: "Web interface {{ $labels.instance }} is not responding to HTTP requests"
-
-      # Grafana API Issues
-      - alert: GrafanaAPIIssue
-        expr: probe_success{job="http-grafana"} == 0
-        for: 2m
-        labels:
-          severity: warning
-          service: "grafana"
-          alert_type: "http"
-        annotations:
-          summary: "Grafana API is not responding"
-          description: "Grafana API health check has been failing for {{ $humanizeDuration .For }}"
-
-      # HTTP Response Time High
-      - alert: HTTPResponseTimeHigh
-        expr: probe_http_duration_seconds > 5
-        for: 2m
-        labels:
-          severity: warning
-          service: "http"
-          target: "{{ $labels.instance }}"
-          alert_type: "performance"
-        annotations:
-          summary: "HTTP response time is high"
-          description: "HTTP response time for {{ $labels.instance }} is {{ $value }}s, exceeding 5s threshold"
-
-      # SSL Certificate Expiry Warning
-      - alert: SSLCertificateExpiryWarning
-        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 30
-        for: 1h
-        labels:
-          severity: warning
-          service: "ssl"
-          target: "{{ $labels.instance }}"
-          alert_type: "certificate"
-        annotations:
-          summary: "SSL certificate expiring soon"
-          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}"
-
-      # SSL Certificate Expiry Critical
-      - alert: SSLCertificateExpiryCritical
-        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 7
-        for: 1h
-        labels:
-          severity: critical
-          service: "ssl"
-          target: "{{ $labels.instance }}"
-          alert_type: "certificate"
-        annotations:
-          summary: "SSL certificate expiring very soon"
-          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | humanizeDuration }}"
-
-  - name: blackbox_tcp_alerts
-    rules:
-      # 5G Core SBI Port Down
-      - alert: FiveGCoreSBIPortDown
-        expr: probe_success{job="tcp-5g-core-ports"} == 0
-        for: 1m
-        labels:
-          severity: critical
-          service: "5g-sbi"
-          target: "{{ $labels.instance }}"
-          alert_type: "tcp"
-        annotations:
-          summary: "5G Core SBI port is down"
-          description: "5G Core SBI port {{ $labels.instance }} is not accepting TCP connections"
-
-      # Database Port Down
-      - alert: DatabasePortDown
-        expr: probe_success{job="tcp-database-ports"} == 0
-        for: 2m
-        labels:
-          severity: critical
-          service: "database"
-          target: "{{ $labels.instance }}"
-          alert_type: "tcp"
-        annotations:
-          summary: "Database port is down"
-          description: "Database port {{ $labels.instance }} is not accepting connections for {{ $humanizeDuration .For }}"
-
-      # ONOS Controller Port Issues
-      - alert: ONOSPortDown
-        expr: probe_success{job="tcp-onos-ports"} == 0
-        for: 3m
-        labels:
-          severity: warning
-          service: "onos"
-          target: "{{ $labels.instance }}"
-          alert_type: "tcp"
-        annotations:
-          summary: "ONOS controller port is down"
-          description: "ONOS controller port {{ $labels.instance }} is not accepting connections"
-
-  - name: blackbox_dns_alerts
-    rules:
-      # DNS Resolution Failure
-      - alert: DNSResolutionFailure
-        expr: probe_success{job="dns-resolution"} == 0
+      # External Connectivity Loss
+      - alert: ExternalConnectivityLoss
+        expr: probe_success{instance="8.8.8.8"} == 0
         for: 5m
         labels:
           severity: warning
-          service: "dns"
-          target: "{{ $labels.instance }}"
-          alert_type: "dns"
+          service: "external"
         annotations:
-          summary: "DNS resolution failure"
-          description: "DNS server {{ $labels.instance }} is not resolving queries properly"
-
-      # DNS Response Time High
-      - alert: DNSResponseTimeHigh
-        expr: probe_duration_seconds{job="dns-resolution"} > 2
-        for: 3m
-        labels:
-          severity: warning
-          service: "dns"
-          target: "{{ $labels.instance }}"
-          alert_type: "performance"
-        annotations:
-          summary: "DNS response time is high"
-          description: "DNS response time for {{ $labels.instance }} is {{ $value }}s, exceeding 2s threshold"
-
-  - name: 5g_core_alerts
-    rules:
-      # High CPU Usage Alert
-      - alert: HighCPUUsage
-        expr: rate(container_cpu_usage_seconds_total[5m]) * 100 > 90
-        for: 2m
-        labels:
-          severity: critical
-          service: "{{ $labels.name }}"
-          alert_type: "resource"
-        annotations:
-          summary: "High CPU usage detected"
-          description: "Container {{ $labels.name }} has CPU usage above 90% for more than 2 minutes"
-
-      # High Memory Usage Alert
-      - alert: HighMemoryUsage
-        expr: (container_memory_usage_bytes / container_spec_memory_limit_bytes) * 100 > 90
-        for: 2m
-        labels:
-          severity: critical
-          service: "{{ $labels.name }}"
-          alert_type: "resource"
-        annotations:
-          summary: "High memory usage detected"
-          description: "Container {{ $labels.name }} has memory usage above 90% for more than 2 minutes"
-
-      # Container Down Alert
-      - alert: ContainerDown
-        expr: up == 0
-        for: 1m
-        labels:
-          severity: critical
-          service: "{{ $labels.job }}"
-          alert_type: "availability"
-        annotations:
-          summary: "Container is down"
-          description: "Container {{ $labels.job }} has been down for more than 1 minute"
-
-      # Low Registration Success Rate
-      - alert: LowRegistrationSuccessRate
-        expr: (sum(rate(open5gs_amf_registration_success_total[5m])) / sum(rate(open5gs_amf_registration_attempts_total[5m]))) * 100 < 80
-        for: 5m
-        labels:
-          severity: warning
-          service: "amf"
-          alert_type: "functional"
-        annotations:
-          summary: "Low UE registration success rate"
-          description: "UE registration success rate is below 80% for the last 5 minutes"
-
-      # Low PDU Session Success Rate
-      - alert: LowPDUSessionSuccessRate
-        expr: (sum(rate(open5gs_smf_pdu_session_establishment_success_total[5m])) / sum(rate(open5gs_smf_pdu_session_establishment_attempts_total[5m]))) * 100 < 80
-        for: 5m
-        labels:
-          severity: warning
-          service: "smf"
-          alert_type: "functional"
-        annotations:
-          summary: "Low PDU session establishment success rate"
-          description: "PDU session establishment success rate is below 80% for the last 5 minutes"
-
-      # Container Restart Alert
-      - alert: ContainerRestart
-        expr: rate(container_start_time_seconds[5m]) > 0
-        for: 0m
-        labels:
-          severity: warning
-          service: "{{ $labels.name }}"
-          alert_type: "stability"
-        annotations:
-          summary: "Container restarted"
-          description: "Container {{ $labels.name }} has restarted"
-
-      # High System Load
-      - alert: HighSystemLoad
-        expr: node_load15 > 2
-        for: 5m
-        labels:
-          severity: warning
-          service: "system"
-          alert_type: "resource"
-        annotations:
-          summary: "High system load"
-          description: "System load average (15m) is above 2 for the last 5 minutes"
-
-      # Disk Space Low
-      - alert: DiskSpaceLow
-        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) * 100 < 10
-        for: 5m
-        labels:
-          severity: critical
-          service: "system"
-          alert_type: "resource"
-        annotations:
-          summary: "Low disk space"
-          description: "Disk space is below 10% on filesystem {{ $labels.mountpoint }}"
-
-      # High Network Traffic
-      - alert: HighNetworkTraffic
-        expr: rate(container_network_receive_bytes_total[5m]) > 100000000 or rate(container_network_transmit_bytes_total[5m]) > 100000000
-        for: 5m
-        labels:
-          severity: warning
-          service: "{{ $labels.name }}"
-          alert_type: "network"
-        annotations:
-          summary: "High network traffic"
-          description: "Container {{ $labels.name }} has high network traffic (>100MB/s) for the last 5 minutes"
+          summary: "External connectivity lost"
+          description: "External connectivity to internet has been lost for 5 minutes"
 
   - name: 5g_core_capacity_alerts
     rules:
       # High UE Count
       - alert: HighUECount
-        expr: count(container_last_seen{name=~"mn\\.UE__[0-9]+.*", image="adaptive/ueransim:latest"}) > 80
+        expr: sum(open5gs_amf_connected_ues) > 80
         for: 2m
         labels:
           severity: warning
           service: "capacity"
-          alert_type: "capacity"
         annotations:
           summary: "High number of connected UEs"
-          description: "Number of connected UEs is {{ $value }}, above 80 threshold"
+          description: "Number of connected UEs is above 80"
 
       # High gNB Count
       - alert: HighgNBCount
-        expr: count(container_last_seen{name=~"mn\\.GNB__[0-9]+.*", image="adaptive/ueransim:latest"}) > 8
+        expr: sum(open5gs_amf_connected_gnbs) > 8
         for: 2m
         labels:
           severity: warning
           service: "capacity"
-          alert_type: "capacity"
         annotations:
           summary: "High number of connected gNodeBs"
-          description: "Number of connected gNodeBs is {{ $value }}, above 8 threshold"
+          description: "Number of connected gNodeBs is above 8"
 
-      # Low PDU Session Establishment Rate
-      - alert: LowPDUSessionRate
-        expr: (count(container_network_receive_bytes_total{interface="uesimtun0", name=~"mn\\.UE__[0-9]+.*"}) / count(container_last_seen{name=~"mn\\.UE__[0-9]+.*"})) * 100 < 50
-        for: 5m
-        labels:
-          severity: critical
-          service: "capacity"
-          alert_type: "functional"
-        annotations:
-          summary: "Low PDU session establishment rate"
-          description: "PDU session establishment rate is {{ $value }}%, below 50% threshold"
-
-  - name: monitoring_self_alerts
-    rules:
-      # Blackbox Exporter Down
-      - alert: BlackboxExporterDown
-        expr: up{job="blackbox-exporter"} == 0
+      # High PDU Session Count
+      - alert: HighPDUSessionCount
+        expr: sum(open5gs_smf_pdu_sessions) > 90
         for: 2m
         labels:
-          severity: critical
-          service: "blackbox-exporter"
-          alert_type: "monitoring"
+          severity: warning
+          service: "capacity"
         annotations:
-          summary: "Blackbox Exporter is down"
-          description: "Blackbox Exporter has been down for {{ $humanizeDuration .For }}"
+          summary: "High number of PDU sessions"
+          description: "Number of active PDU sessions is above 90"
 
+  - name: prometheus_self_monitoring
+    rules:
       # Prometheus Target Down
       - alert: PrometheusTargetDown
         expr: up == 0
@@ -386,7 +218,6 @@ groups:
         labels:
           severity: critical
           service: "prometheus"
-          alert_type: "monitoring"
         annotations:
           summary: "Prometheus target down"
           description: "Prometheus target {{ $labels.job }} is down"
@@ -398,34 +229,9 @@ groups:
         labels:
           severity: critical
           service: "prometheus"
-          alert_type: "monitoring"
         annotations:
           summary: "Prometheus configuration reload failed"
           description: "Prometheus configuration reload has failed"
-
-      # Alertmanager Down
-      - alert: AlertmanagerDown
-        expr: up{job="alertmanager"} == 0
-        for: 3m
-        labels:
-          severity: critical
-          service: "alertmanager"
-          alert_type: "monitoring"
-        annotations:
-          summary: "Alertmanager is down"
-          description: "Alertmanager has been down for {{ $humanizeDuration .For }}"
-
-      # High Number of Failed Probes
-      - alert: HighProbeFailureRate
-        expr: (rate(probe_success == 0[5m]) / rate(probe_success[5m])) * 100 > 20
-        for: 5m
-        labels:
-          severity: warning
-          service: "blackbox"
-          alert_type: "monitoring"
-        annotations:
-          summary: "High probe failure rate"
-          description: "Blackbox probe failure rate is {{ $value }}%, above 20% threshold"
 
       # Too Many Restarts
       - alert: TooManyRestarts
@@ -434,7 +240,6 @@ groups:
         labels:
           severity: warning
           service: "prometheus"
-          alert_type: "monitoring"
         annotations:
           summary: "Prometheus has restarted"
           description: "Prometheus has restarted {{ $value }} times in the last 15 minutes"
